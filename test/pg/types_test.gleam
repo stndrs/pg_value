@@ -17,8 +17,7 @@ pub fn decode_timestamp_test() {
   let out = dynamic.int(1_000_000)
 
   let assert Ok(ts) = types.decode(in, timestamp())
-
-  equal(out, ts)
+  let assert True = out == ts
 }
 
 pub fn decode_timestamp_pos_infinity_test() {
@@ -27,7 +26,7 @@ pub fn decode_timestamp_pos_infinity_test() {
 
   let assert Ok(ts) = types.decode(in, timestamp())
 
-  equal(out, ts)
+  let assert True = out == ts
 }
 
 pub fn decode_timestamp_neg_infinity_test() {
@@ -36,7 +35,7 @@ pub fn decode_timestamp_neg_infinity_test() {
 
   let assert Ok(ts) = types.decode(in, timestamp())
 
-  equal(out, ts)
+  let assert True = out == ts
 }
 
 pub fn decode_oid_test() {
@@ -47,7 +46,7 @@ pub fn decode_oid_test() {
 
   let assert Ok(result) = types.decode(in, oid())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_bool_test() {
@@ -58,7 +57,7 @@ pub fn decode_bool_test() {
 
   let assert Ok(result) = types.decode(in, bool())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_int2_test() {
@@ -69,7 +68,7 @@ pub fn decode_int2_test() {
 
   let assert Ok(result) = types.decode(in, int2())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_int2_error_test() {
@@ -78,7 +77,7 @@ pub fn decode_int2_error_test() {
 
   let assert Error(msg) = types.decode(in, int2())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_int4_test() {
@@ -89,7 +88,7 @@ pub fn decode_int4_test() {
 
   let assert Ok(result) = types.decode(in, int4())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_int4_error_test() {
@@ -98,7 +97,7 @@ pub fn decode_int4_error_test() {
 
   let assert Error(msg) = types.decode(in, int4())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_int8_test() {
@@ -113,7 +112,7 @@ pub fn decode_int8_test() {
 
   let assert Ok(result) = types.decode(in, int8())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_int8_error_test() {
@@ -122,7 +121,7 @@ pub fn decode_int8_error_test() {
 
   let assert Error(msg) = types.decode(in, int8())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_float4_test() {
@@ -133,7 +132,7 @@ pub fn decode_float4_test() {
 
   let assert Ok(result) = types.decode(in, float4())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_float4_error_test() {
@@ -142,7 +141,7 @@ pub fn decode_float4_error_test() {
 
   let assert Error(msg) = types.decode(in, float4())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_float8_test() {
@@ -153,7 +152,7 @@ pub fn decode_float8_test() {
 
   let assert Ok(result) = types.decode(in, float8())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_float8_error_test() {
@@ -162,7 +161,7 @@ pub fn decode_float8_error_test() {
 
   let assert Error(msg) = types.decode(in, float8())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_varchar_test() {
@@ -173,7 +172,7 @@ pub fn decode_varchar_test() {
 
   let assert Ok(result) = types.decode(in, varchar())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_varchar_error_test() {
@@ -182,7 +181,7 @@ pub fn decode_varchar_error_test() {
 
   let assert Error(msg) = types.decode(in, varchar())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_text_test() {
@@ -193,7 +192,7 @@ pub fn decode_text_test() {
 
   let assert Ok(result) = types.decode(in, text())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_text_error_test() {
@@ -202,7 +201,7 @@ pub fn decode_text_error_test() {
 
   let assert Error(msg) = types.decode(in, text())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_bytea_test() {
@@ -213,7 +212,7 @@ pub fn decode_bytea_test() {
 
   let assert Ok(result) = types.decode(in, bytea())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_char_test() {
@@ -224,7 +223,7 @@ pub fn decode_char_test() {
 
   let assert Ok(result) = types.decode(in, char())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_name_test() {
@@ -235,7 +234,7 @@ pub fn decode_name_test() {
 
   let assert Ok(result) = types.decode(in, name())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_time_test() {
@@ -273,7 +272,7 @@ pub fn decode_time_test() {
 
   let assert Ok(result) = types.decode(in, time())
 
-  equal(expected, result)
+  let assert True = expected == result
 }
 
 pub fn decode_time_error_test() {
@@ -282,7 +281,7 @@ pub fn decode_time_error_test() {
 
   let assert Error(msg) = types.decode(in, time())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn decode_date_test() {
@@ -297,7 +296,7 @@ pub fn decode_date_test() {
 
   let assert Ok(result) = types.decode(in, date())
 
-  equal(out, result)
+  let assert True = out == result
 }
 
 pub fn decode_date_error_test() {
@@ -306,7 +305,7 @@ pub fn decode_date_error_test() {
 
   let assert Error(msg) = types.decode(in, date())
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 pub fn array_error_test() {
@@ -315,7 +314,7 @@ pub fn array_error_test() {
 
   let assert Error(msg) = types.decode(in, array(int2()))
 
-  equal(out, msg)
+  let assert True = out == msg
 }
 
 // Encode tests //
@@ -328,7 +327,7 @@ pub fn encode_bool_test() {
 
   let assert Ok(out) = types.encode(in, bool(), with: types.bool)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_int2_test() {
@@ -339,7 +338,7 @@ pub fn encode_int2_test() {
 
   let assert Ok(out) = types.encode(in, int2(), with: types.int2)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_int2_error_test() {
@@ -350,7 +349,7 @@ pub fn encode_int2_error_test() {
 
   let assert Error(msg) = types.encode(in, int2(), with: types.int2)
 
-  equal(expected, msg)
+  let assert True = expected == msg
 }
 
 pub fn encode_int4_test() {
@@ -361,7 +360,7 @@ pub fn encode_int4_test() {
 
   let assert Ok(out) = types.encode(in, int4(), with: types.int4)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_int4_error_test() {
@@ -372,7 +371,7 @@ pub fn encode_int4_error_test() {
 
   let assert Error(msg) = types.encode(in, int4(), with: types.int4)
 
-  equal(expected, msg)
+  let assert True = expected == msg
 }
 
 pub fn encode_int8_test() {
@@ -387,7 +386,7 @@ pub fn encode_int8_test() {
 
   let assert Ok(out) = types.encode(in, int8(), with: types.int8)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_int8_error_test() {
@@ -401,7 +400,7 @@ pub fn encode_int8_error_test() {
 
   let assert Error(msg) = types.encode(in, int8(), with: types.int8)
 
-  equal(expected, msg)
+  let assert True = expected == msg
 }
 
 pub fn encode_float4_test() {
@@ -412,7 +411,7 @@ pub fn encode_float4_test() {
 
   let assert Ok(out) = types.encode(in, float4(), with: types.float4)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_float8_test() {
@@ -423,7 +422,7 @@ pub fn encode_float8_test() {
 
   let assert Ok(out) = types.encode(in, float8(), with: types.float8)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_oid_test() {
@@ -434,7 +433,7 @@ pub fn encode_oid_test() {
 
   let assert Ok(out) = types.encode(in, oid(), with: types.oid)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_oid_error_test() {
@@ -445,7 +444,7 @@ pub fn encode_oid_error_test() {
 
   let assert Error(msg) = types.encode(in, oid(), with: types.oid)
 
-  equal(expected, msg)
+  let assert True = expected == msg
 }
 
 pub fn encode_varchar_test() {
@@ -456,7 +455,7 @@ pub fn encode_varchar_test() {
 
   let assert Ok(out) = types.encode(in, varchar(), with: types.text)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_date_test() {
@@ -468,7 +467,7 @@ pub fn encode_date_test() {
 
   let assert Ok(out) = types.encode(in, date(), with: types.date)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_time_test() {
@@ -479,7 +478,7 @@ pub fn encode_time_test() {
 
   let assert Ok(out) = types.encode(in, time(), with: types.time)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_timestamp_test() {
@@ -490,7 +489,7 @@ pub fn encode_timestamp_test() {
 
   let assert Ok(out) = types.encode(in, timestamp(), with: types.timestamp)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 fn microseconds(count: Int) -> duration.Duration {
@@ -527,7 +526,7 @@ pub fn encode_interval_test() {
 
   let assert Ok(out) = types.encode(usecs, interval(), with: types.interval)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_timestampz_test() {
@@ -543,7 +542,7 @@ pub fn encode_timestampz_test() {
   let assert Ok(out) =
     types.encode(#(ts, offset), timestampz(), with: types.timestampz)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_positive_offset_timestampz_test() {
@@ -565,7 +564,7 @@ pub fn encode_positive_offset_timestampz_test() {
   let assert Ok(out) =
     types.encode(#(ts, offset), timestampz(), with: types.timestampz)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn encode_negative_offset_timestampz_test() {
@@ -590,7 +589,7 @@ pub fn encode_negative_offset_timestampz_test() {
   let assert Ok(out) =
     types.encode(#(ts, offset), timestampz(), with: types.timestampz)
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn empty_array_test() {
@@ -604,7 +603,7 @@ pub fn empty_array_test() {
       types.array(val, info, of: types.int2)
     })
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn string_array_test() {
@@ -621,7 +620,7 @@ pub fn string_array_test() {
       types.array(val, info, of: types.text)
     })
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn int_array_test() {
@@ -637,7 +636,7 @@ pub fn int_array_test() {
       types.array(val, info, of: types.int4)
     })
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 pub fn null_array_test() {
@@ -654,7 +653,7 @@ pub fn null_array_test() {
       types.array(val, info, of: types.null)
     })
 
-  equal(expected, out)
+  let assert True = expected == out
 }
 
 // pub fn nested_array_test() {
@@ -669,7 +668,7 @@ pub fn null_array_test() {
 //       })
 //     })
 // 
-//   equal(expected, out)
+//   let assert True = expected == out
 // }
 
 // TypeInfo helpers
@@ -781,12 +780,4 @@ fn array(ti: types.TypeInfo) -> types.TypeInfo {
   |> types.set_typesend("array_send")
   |> types.set_typereceive("array_recv")
   |> types.set_elem_type(Some(ti))
-}
-
-// test helper
-
-pub fn equal(left: a, right: a) -> a {
-  assert left == right
-
-  right
 }
