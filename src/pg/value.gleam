@@ -24,6 +24,10 @@ pub type Value {
 
 pub const null = Null
 
+pub const true = Bool(True)
+
+pub const false = Bool(False)
+
 pub fn bool(val: Bool) -> Value {
   Bool(val)
 }
