@@ -8,7 +8,7 @@ import gleam/result
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
-import pg/types/internal
+import pgl/types/internal
 
 pub type TypeInfo {
   TypeInfo(

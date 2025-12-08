@@ -6,8 +6,8 @@ import gleam/result
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
-import pg/types
-import pg/types/internal
+import pgl/types
+import pgl/types/internal
 
 pub fn decode_timestamp_test() {
   let ts_value =
