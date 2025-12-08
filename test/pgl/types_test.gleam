@@ -595,7 +595,7 @@ pub fn encode_negative_offtimestampz_test() {
 pub fn empty_array_test() {
   let expected = <<
     12:big-int-size(32), 0:big-int-size(32), 0:big-int-size(32),
-    25:big-int-size(32),
+    21:big-int-size(32),
   >>
 
   let assert Ok(out) =
@@ -627,7 +627,7 @@ pub fn int_array_test() {
   let in = [42]
   let expected = <<
     28:big-int-size(32), 1:big-int-size(32), 0:big-int-size(32),
-    25:big-int-size(32), 1:big-int-size(32), 1:big-int-size(32),
+    23:big-int-size(32), 1:big-int-size(32), 1:big-int-size(32),
     4:big-int-size(32), 42:big-int-size(32),
   >>
 
@@ -644,7 +644,7 @@ pub fn null_array_test() {
 
   let expected = <<
     24:big-int-size(32), 1:big-int-size(32), 1:big-int-size(32),
-    25:big-int-size(32), 1:big-int-size(32), 1:big-int-size(32),
+    23:big-int-size(32), 1:big-int-size(32), 1:big-int-size(32),
     -1:big-int-size(32),
   >>
 
@@ -674,49 +674,49 @@ pub fn null_array_test() {
 // TypeInfo helpers
 
 fn oid() {
-  types.info(25)
+  types.info(26)
   |> types.typesend("oidsend")
   |> types.typereceive("oidrecv")
 }
 
 fn bool() {
-  types.info(25)
+  types.info(16)
   |> types.typesend("boolsend")
   |> types.typereceive("boolrecv")
 }
 
 fn int2() {
-  types.info(25)
+  types.info(21)
   |> types.typesend("int2send")
   |> types.typereceive("int2recv")
 }
 
 fn int4() {
-  types.info(25)
+  types.info(23)
   |> types.typesend("int4send")
   |> types.typereceive("int4recv")
 }
 
 fn int8() {
-  types.info(25)
+  types.info(20)
   |> types.typesend("int8send")
   |> types.typereceive("int8recv")
 }
 
 fn float4() {
-  types.info(25)
+  types.info(700)
   |> types.typesend("float4send")
   |> types.typereceive("float4recv")
 }
 
 fn float8() {
-  types.info(25)
+  types.info(701)
   |> types.typesend("float8send")
   |> types.typereceive("float8recv")
 }
 
 fn varchar() {
-  types.info(25)
+  types.info(1043)
   |> types.typesend("varcharsend")
   |> types.typereceive("varcharrecv")
 }
@@ -728,55 +728,55 @@ fn text() {
 }
 
 fn bytea() {
-  types.info(25)
+  types.info(17)
   |> types.typesend("byteasend")
   |> types.typereceive("bytearecv")
 }
 
 fn char() {
-  types.info(25)
+  types.info(18)
   |> types.typesend("charsend")
   |> types.typereceive("charrecv")
 }
 
 fn name() {
-  types.info(25)
+  types.info(19)
   |> types.typesend("namesend")
   |> types.typereceive("namerecv")
 }
 
 fn time() {
-  types.info(25)
+  types.info(1083)
   |> types.typesend("time_send")
   |> types.typereceive("time_recv")
 }
 
 fn date() {
-  types.info(25)
+  types.info(1082)
   |> types.typesend("date_send")
   |> types.typereceive("date_recv")
 }
 
 fn timestamp() {
-  types.info(25)
+  types.info(1114)
   |> types.typesend("timestamp_send")
   |> types.typereceive("timestamp_recv")
 }
 
 fn timestampz() {
-  types.info(25)
+  types.info(1184)
   |> types.typesend("timestampz_send")
   |> types.typereceive("timestampz_recv")
 }
 
 fn interval() {
-  types.info(25)
+  types.info(1186)
   |> types.typesend("interval_send")
   |> types.typereceive("interval_recv")
 }
 
 fn array(ti: types.TypeInfo) -> types.TypeInfo {
-  types.info(25)
+  types.info(143)
   |> types.typesend("array_send")
   |> types.typereceive("array_recv")
   |> types.elem_type(Some(ti))
