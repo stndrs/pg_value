@@ -9,7 +9,6 @@ import gleam/string
 import gleam/time/calendar
 import gleam/time/duration
 import gleam/time/timestamp
-import pgl/types/internal
 
 pub type Value {
   Null
@@ -361,7 +360,7 @@ fn encode_bool(bool: Bool, _ti: TypeInfo) -> Result(BitArray, String) {
 }
 
 fn encode_oid(num: Int, _ti: TypeInfo) -> Result(BitArray, String) {
-  case 0 <= num && num <= internal.oid_max {
+  case 0 <= num && num <= oid_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
     False -> Error("Out of range for oid")
   }
@@ -381,21 +380,21 @@ fn encode_int(num: Int, ti: TypeInfo) -> Result(BitArray, String) {
 }
 
 fn encode_int2(num: Int, _ti: TypeInfo) -> Result(BitArray, String) {
-  case -internal.int2_min <= num && num <= internal.int2_max {
+  case -int2_min <= num && num <= int2_max {
     True -> Ok(<<2:big-int-size(32), num:big-int-size(16)>>)
     False -> Error("Out of range for int2")
   }
 }
 
 fn encode_int4(num: Int, _ti: TypeInfo) -> Result(BitArray, String) {
-  case -internal.int4_min <= num && num <= internal.int4_max {
+  case -int4_min <= num && num <= int4_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
     False -> Error("Out of range for int4")
   }
 }
 
 fn encode_int8(num: Int, _ti: TypeInfo) -> Result(BitArray, String) {
-  case -internal.int8_min <= num && num <= internal.int8_max {
+  case -int8_min <= num && num <= int8_max {
     True -> Ok(<<8:big-int-size(32), num:big-int-size(64)>>)
     False -> Error("Out of range for int8")
   }
@@ -429,12 +428,12 @@ fn encode_bytea(bits: BitArray, _ti: TypeInfo) -> Result(BitArray, String) {
 
 fn encode_date(date: calendar.Date, _ti: TypeInfo) -> Result(BitArray, String) {
   let gregorian_days =
-    internal.date_to_gregorian_days(
+    date_to_gregorian_days(
       date.year,
       calendar.month_to_int(date.month),
       date.day,
     )
-  let pg_days = gregorian_days - internal.postgres_gd_epoch
+  let pg_days = gregorian_days - postgres_gd_epoch
 
   Ok(<<4:big-int-size(32), pg_days:big-int-size(32)>>)
 }
@@ -448,7 +447,7 @@ fn encode_time(
     |> duration.add(duration.minutes(tod.minutes))
     |> duration.add(duration.seconds(tod.seconds))
     |> duration.add(duration.nanoseconds(tod.nanoseconds))
-    |> internal.to_microseconds(duration.to_seconds_and_nanoseconds)
+    |> to_microseconds(duration.to_seconds_and_nanoseconds)
 
   Ok(<<8:big-int-size(32), usecs:big-int-size(64)>>)
 }
@@ -457,7 +456,7 @@ fn encode_interval(
   dur: duration.Duration,
   _ti: TypeInfo,
 ) -> Result(BitArray, String) {
-  let usecs = internal.to_microseconds(dur, duration.to_seconds_and_nanoseconds)
+  let usecs = to_microseconds(dur, duration.to_seconds_and_nanoseconds)
 
   let encoded = <<
     16:big-int-size(32),
@@ -474,9 +473,9 @@ fn encode_timestamp(
   _ti: TypeInfo,
 ) -> Result(BitArray, String) {
   let ts_int =
-    internal.unix_seconds_before_postgres_epoch()
+    unix_seconds_before_postgres_epoch()
     |> timestamp.add(ts, _)
-    |> internal.to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
+    |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
 
   Ok(<<8:big-int-size(32), ts_int:big-int-size(64)>>)
 }
@@ -488,10 +487,10 @@ fn encode_timestamptz(
   let #(ts, offset) = tsz
 
   let ts_int =
-    internal.unix_seconds_before_postgres_epoch()
+    unix_seconds_before_postgres_epoch()
     |> duration.add(offset)
     |> timestamp.add(ts, _)
-    |> internal.to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
+    |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
 
   Ok(<<8:big-int-size(32), ts_int:big-int-size(64)>>)
 }
@@ -697,8 +696,8 @@ fn decode_time(bits: BitArray) -> Result(Dynamic, String) {
 }
 
 fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
-  let pos_infinity = internal.int8_max
-  let neg_infinity = -internal.int8_min
+  let pos_infinity = int8_max
+  let neg_infinity = -int8_min
 
   case bits {
     <<num:signed-big-int-size(64)>> -> {
@@ -715,8 +714,8 @@ fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
 fn handle_timestamp(microseconds: Int) -> Dynamic {
   let seconds_since_unix_epoch =
     { microseconds / 1_000_000 }
-    |> int.add(internal.postgres_gs_epoch)
-    |> int.subtract(internal.gs_to_unix_epoch)
+    |> int.add(postgres_gs_epoch)
+    |> int.subtract(gs_to_unix_epoch)
 
   let usecs_since_unix_epoch = seconds_since_unix_epoch * 1_000_000
 
@@ -756,18 +755,72 @@ fn decode_interval(bits: BitArray) -> Result(Dynamic, String) {
 }
 
 fn from_microseconds(usecs: Int) -> calendar.TimeOfDay {
-  let seconds = usecs / internal.usecs_per_sec
-  let nanoseconds = { usecs % internal.usecs_per_sec } * 1000
+  let seconds = usecs / usecs_per_sec
+  let nanoseconds = { usecs % usecs_per_sec } * 1000
 
-  let #(hours, minutes, seconds) = internal.seconds_to_time(seconds)
+  let #(hours, minutes, seconds) = seconds_to_time(seconds)
 
   calendar.TimeOfDay(hours:, minutes:, seconds:, nanoseconds:)
 }
 
 fn days_to_date(days: Int) -> Result(calendar.Date, Nil) {
-  let #(year, month, day) =
-    internal.gregorian_days_to_date(days + internal.postgres_gd_epoch)
+  let #(year, month, day) = gregorian_days_to_date(days + postgres_gd_epoch)
 
   calendar.month_from_int(month)
   |> result.map(fn(month) { calendar.Date(year:, month:, day:) })
 }
+
+fn to_microseconds(
+  kind: a,
+  to_seconds_and_nanoseconds: fn(a) -> #(Int, Int),
+) -> Int {
+  let #(seconds, nanoseconds) = to_seconds_and_nanoseconds(kind)
+
+  { seconds * usecs_per_sec } + { nanoseconds / nsecs_per_usec }
+}
+
+fn unix_seconds_before_postgres_epoch() -> duration.Duration {
+  gs_to_unix_epoch
+  |> int.subtract(postgres_gs_epoch)
+  |> duration.seconds
+}
+
+// constants
+
+const oid_max = 0xFFFFFFFF
+
+const int2_min = 0x8000
+
+const int2_max = 0x7FFF
+
+const int4_min = 0x80000000
+
+const int4_max = 0x7FFFFFFF
+
+const int8_max = 0x7FFFFFFFFFFFFFFF
+
+const int8_min = 0x8000000000000000
+
+// Seconds between Jan 1, 0001 and Dec 31, 1999
+const postgres_gs_epoch = 63_113_904_000
+
+// Seconds between Jan 1, 0001 and Jan 1, 1970
+const gs_to_unix_epoch = 62_167_219_200
+
+// Days between Jan 1, 0001 and Dec 31, 1999
+const postgres_gd_epoch = 730_485
+
+const usecs_per_sec = 1_000_000
+
+const nsecs_per_usec = 1000
+
+// FFI
+
+@external(erlang, "calendar", "gregorian_days_to_date")
+pub fn gregorian_days_to_date(days: Int) -> #(Int, Int, Int)
+
+@external(erlang, "calendar", "seconds_to_time")
+pub fn seconds_to_time(seconds: Int) -> #(Int, Int, Int)
+
+@external(erlang, "calendar", "date_to_gregorian_days")
+pub fn date_to_gregorian_days(year: Int, month: Int, day: Int) -> Int

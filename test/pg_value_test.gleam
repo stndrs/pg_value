@@ -9,7 +9,6 @@ import gleam/time/duration
 import gleam/time/timestamp
 import gleeunit
 import pg_value as value
-import pgl/types/internal
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -107,9 +106,20 @@ pub fn interval_to_string_test() {
 
 // Decode tests
 
+const postgres_gs_epoch = 63_113_904_000
+
+const gs_to_unix_epoch = 62_167_219_200
+
+const int8_max = 0x7FFFFFFFFFFFFFFF
+
+const int8_min = 0x8000000000000000
+
+const usecs_per_sec = 1_000_000
+
+const nsecs_per_usec = 1000
+
 pub fn decode_timestamp_test() {
-  let ts_value =
-    { 1 - internal.postgres_gs_epoch + internal.gs_to_unix_epoch } * 1_000_000
+  let ts_value = { 1 - postgres_gs_epoch + gs_to_unix_epoch } * 1_000_000
 
   let in = <<ts_value:big-int-size(64)>>
   let out = dynamic.int(1_000_000)
@@ -119,7 +129,7 @@ pub fn decode_timestamp_test() {
 }
 
 pub fn decode_timestamp_pos_infinity_test() {
-  let in = <<internal.int8_max:big-int-size(64)>>
+  let in = <<int8_max:big-int-size(64)>>
   let out = dynamic.string("infinity")
 
   let assert Ok(ts) = value.decode(in, timestamp())
@@ -128,7 +138,7 @@ pub fn decode_timestamp_pos_infinity_test() {
 }
 
 pub fn decode_timestamp_neg_infinity_test() {
-  let in = <<-internal.int8_min:big-int-size(64)>>
+  let in = <<-int8_min:big-int-size(64)>>
   let out = dynamic.string("-infinity")
 
   let assert Ok(ts) = value.decode(in, timestamp())
@@ -603,8 +613,7 @@ fn to_microseconds(
 ) -> Int {
   let #(seconds, nanoseconds) = to_seconds_and_nanoseconds(kind)
 
-  { seconds * internal.usecs_per_sec }
-  + { nanoseconds / internal.nsecs_per_usec }
+  { seconds * usecs_per_sec } + { nanoseconds / nsecs_per_usec }
 }
 
 pub fn encode_interval_test() {
@@ -653,7 +662,7 @@ pub fn encode_positive_offtimestamptz_test() {
   let ten_hours =
     offset
     |> timestamp.add(ts, _)
-    |> internal.to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
+    |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
     |> int.add(expected_utc_int)
 
   let expected = <<
@@ -679,7 +688,7 @@ pub fn encode_negative_offtimestamptz_test() {
   let minus_two_thirty =
     offset
     |> timestamp.add(ts, _)
-    |> internal.to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
+    |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
     |> int.add(expected_utc_int)
 
   let expected = <<
