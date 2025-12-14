@@ -52,11 +52,10 @@ pub fn add(left: Interval, right: Interval) -> Interval {
 }
 
 /// Converts an interval to an [ISO8601](https://en.wikipedia.org/wiki/ISO_8601#Durations)
-/// formatted string. This function avoids conversions of any of the provided Interval's
-/// units, except for when microseconds are provided and we need to include the decimal
-/// fraction for seconds. If microseconds is larger than 1_000_000, whole seconds will
-/// be added on to the number of seconds provided by the Interval. The remaining microseconds
-/// will be appended as a decimal fraction.
+/// formatted string. This function avoids converting the Interval's units, except for
+/// when the number of microseconds includes whole seconds. If more than `1_000_000`
+/// microseconds are provided, whole seconds will be derived from the microseconds value.
+/// The remaining microseconds will be appended as a decimal in the formatted string.
 ///
 /// `Interval(months: 14, days: 0, seconds: 86430, microseconds: 0)`
 /// will be formatted as "P14MT86430S" rather than subdividing months into years

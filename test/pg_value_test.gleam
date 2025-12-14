@@ -10,6 +10,7 @@ import gleam/time/timestamp
 import gleeunit
 import pg_value as value
 import pg_value/interval
+import pg_value/type_info
 
 pub fn main() -> Nil {
   gleeunit.main()
@@ -923,110 +924,110 @@ pub fn encode_array_validation_error_test() {
 // TypeInfo helpers
 
 fn oid() {
-  value.type_info(26)
-  |> value.typesend("oidsend")
-  |> value.typereceive("oidrecv")
+  type_info.new(26)
+  |> type_info.typesend("oidsend")
+  |> type_info.typereceive("oidrecv")
 }
 
 fn bool() {
-  value.type_info(16)
-  |> value.typesend("boolsend")
-  |> value.typereceive("boolrecv")
+  type_info.new(16)
+  |> type_info.typesend("boolsend")
+  |> type_info.typereceive("boolrecv")
 }
 
 fn int2() {
-  value.type_info(21)
-  |> value.typesend("int2send")
-  |> value.typereceive("int2recv")
+  type_info.new(21)
+  |> type_info.typesend("int2send")
+  |> type_info.typereceive("int2recv")
 }
 
 fn int4() {
-  value.type_info(23)
-  |> value.typesend("int4send")
-  |> value.typereceive("int4recv")
+  type_info.new(23)
+  |> type_info.typesend("int4send")
+  |> type_info.typereceive("int4recv")
 }
 
 fn int8() {
-  value.type_info(20)
-  |> value.typesend("int8send")
-  |> value.typereceive("int8recv")
+  type_info.new(20)
+  |> type_info.typesend("int8send")
+  |> type_info.typereceive("int8recv")
 }
 
 fn float4() {
-  value.type_info(700)
-  |> value.typesend("float4send")
-  |> value.typereceive("float4recv")
+  type_info.new(700)
+  |> type_info.typesend("float4send")
+  |> type_info.typereceive("float4recv")
 }
 
 fn float8() {
-  value.type_info(701)
-  |> value.typesend("float8send")
-  |> value.typereceive("float8recv")
+  type_info.new(701)
+  |> type_info.typesend("float8send")
+  |> type_info.typereceive("float8recv")
 }
 
 fn varchar() {
-  value.type_info(1043)
-  |> value.typesend("varcharsend")
-  |> value.typereceive("varcharrecv")
+  type_info.new(1043)
+  |> type_info.typesend("varcharsend")
+  |> type_info.typereceive("varcharrecv")
 }
 
 fn text() {
-  value.type_info(25)
-  |> value.typesend("textsend")
-  |> value.typereceive("textrecv")
+  type_info.new(25)
+  |> type_info.typesend("textsend")
+  |> type_info.typereceive("textrecv")
 }
 
 fn bytea() {
-  value.type_info(17)
-  |> value.typesend("byteasend")
-  |> value.typereceive("bytearecv")
+  type_info.new(17)
+  |> type_info.typesend("byteasend")
+  |> type_info.typereceive("bytearecv")
 }
 
 fn char() {
-  value.type_info(18)
-  |> value.typesend("charsend")
-  |> value.typereceive("charrecv")
+  type_info.new(18)
+  |> type_info.typesend("charsend")
+  |> type_info.typereceive("charrecv")
 }
 
 fn name() {
-  value.type_info(19)
-  |> value.typesend("namesend")
-  |> value.typereceive("namerecv")
+  type_info.new(19)
+  |> type_info.typesend("namesend")
+  |> type_info.typereceive("namerecv")
 }
 
 fn time() {
-  value.type_info(1083)
-  |> value.typesend("time_send")
-  |> value.typereceive("time_recv")
+  type_info.new(1083)
+  |> type_info.typesend("time_send")
+  |> type_info.typereceive("time_recv")
 }
 
 fn date() {
-  value.type_info(1082)
-  |> value.typesend("date_send")
-  |> value.typereceive("date_recv")
+  type_info.new(1082)
+  |> type_info.typesend("date_send")
+  |> type_info.typereceive("date_recv")
 }
 
 fn timestamp() {
-  value.type_info(1114)
-  |> value.typesend("timestamp_send")
-  |> value.typereceive("timestamp_recv")
+  type_info.new(1114)
+  |> type_info.typesend("timestamp_send")
+  |> type_info.typereceive("timestamp_recv")
 }
 
 fn timestamptz() {
-  value.type_info(1184)
-  |> value.typesend("timestamptz_send")
-  |> value.typereceive("timestamptz_recv")
+  type_info.new(1184)
+  |> type_info.typesend("timestamptz_send")
+  |> type_info.typereceive("timestamptz_recv")
 }
 
 fn interval() {
-  value.type_info(1186)
-  |> value.typesend("interval_send")
-  |> value.typereceive("interval_recv")
+  type_info.new(1186)
+  |> type_info.typesend("interval_send")
+  |> type_info.typereceive("interval_recv")
 }
 
-fn array(ti: value.TypeInfo) -> value.TypeInfo {
-  value.type_info(143)
-  |> value.typesend("array_send")
-  |> value.typereceive("array_recv")
-  |> value.elem_type(Some(ti))
+fn array(ti: type_info.TypeInfo) -> type_info.TypeInfo {
+  type_info.new(143)
+  |> type_info.typesend("array_send")
+  |> type_info.typereceive("array_recv")
+  |> type_info.elem_type(Some(ti))
 }
