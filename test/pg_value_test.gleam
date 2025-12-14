@@ -126,24 +126,23 @@ pub fn timestamptz_with_negative_offset_to_string_test() {
     value.timestamptz(ts, offset) |> value.to_string
 }
 
-// pub fn interval_to_string_test() {
-//   let one_hour_thirty_min = interval.Interval(
-//     months: 0,
-//     days: 1,
-//     seconds: 300,
-//     microseconds: 0
-//   )
-// 
-//   let assert "'P1DT300S'" =
-//     value.interval(duration.hours(1) |> duration.add(duration.minutes(30)))
-//     |> value.to_string
-// 
-//   let assert "'PT0S'" = value.interval(duration.seconds(0)) |> value.to_string
-// 
-//   let assert "'PT5M30S'" =
-//     value.interval(duration.minutes(5) |> duration.add(duration.seconds(30)))
-//     |> value.to_string
-// }
+pub fn interval_to_string_test() {
+  let assert "'P1DT300S'" =
+    interval.Interval(months: 0, days: 1, seconds: 300, microseconds: 0)
+    |> value.interval
+    |> value.to_string
+
+  let assert "'PT0S'" =
+    interval.seconds(0)
+    |> value.interval
+    |> value.to_string
+
+  let assert "'P5MT30S'" =
+    interval.months(5)
+    |> interval.add(interval.seconds(30))
+    |> value.interval
+    |> value.to_string
+}
 
 // Decode tests
 

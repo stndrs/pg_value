@@ -149,7 +149,7 @@ pub fn to_string(value: Value) -> String {
     Date(val) -> date_to_string(val)
     Timestamp(val) -> timestamp_to_string(val)
     Timestamptz(ts, offset) -> timestamptz_to_string(ts, offset)
-    Interval(val) -> interval.to_iso8601_string(val)
+    Interval(val) -> interval.to_iso8601_string(val) |> single_quote
     Array(vals) -> array_to_string(vals)
   }
 }
