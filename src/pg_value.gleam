@@ -68,6 +68,7 @@ pub type Value {
   Array(List(Value))
   Uuid(BitArray)
   Hstore(Dict(String, Option(String)))
+  Enum(String)
 }
 
 pub const null = Null
@@ -126,6 +127,10 @@ pub fn interval(interval: interval.Interval) -> Value {
   Interval(interval)
 }
 
+pub fn enum(label: String) -> Value {
+  Enum(label)
+}
+
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
   |> list.map(kind)
@@ -167,6 +172,7 @@ pub fn to_string(value: Value) -> String {
     Array(vals) -> array_to_string(vals)
     Uuid(val) -> uuid_to_string(val)
     Hstore(val) -> hstore_to_string(val)
+    Enum(val) -> single_quote(val)
   }
 }
 
@@ -375,6 +381,7 @@ pub fn encode(
     Array(val) -> encode_array(val, info)
     Uuid(val) -> encode_uuid(val, info)
     Hstore(val) -> encode_hstore(val, info)
+    Enum(val) -> encode_enum(val, info)
   }
 }
 
@@ -641,6 +648,18 @@ fn encode_text(
   }
 }
 
+fn encode_enum(
+  label: String,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, String) {
+  use <- validate_typesend("enum_send", info)
+
+  let bits = bit_array.from_string(label)
+  let len = bit_array.byte_size(bits)
+
+  Ok(<<len:big-int-size(32), bits:bits>>)
+}
+
 fn encode_bytea(
   bits: BitArray,
   info: type_info.TypeInfo,
@@ -774,6 +793,7 @@ pub fn decode(
     "timestamp_recv" -> decode_timestamp(bits)
     "timestamptz_recv" -> decode_timestamp(bits)
     "interval_recv" -> decode_interval(bits)
+    "enum_recv" -> decode_enum(bits)
     _ -> Error("Unsupported type")
   }
 }
@@ -921,6 +941,12 @@ fn decode_text(bits: BitArray) -> Result(Dynamic, String) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
   |> result.replace_error("invalid text")
+}
+
+fn decode_enum(bits: BitArray) -> Result(Dynamic, String) {
+  bit_array.to_string(bits)
+  |> result.map(dynamic.string)
+  |> result.replace_error("invalid enum")
 }
 
 fn decode_bytea(bits: BitArray) -> Result(Dynamic, String) {
