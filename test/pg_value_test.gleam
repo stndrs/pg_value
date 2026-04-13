@@ -46,8 +46,8 @@ pub fn float_to_string_test() {
 pub fn text_to_string_test() {
   assert "'hello'" == value.text("hello") |> value.to_string
   assert "''" == value.text("") |> value.to_string
-  assert "'It\\'s working'" == value.text("It's working") |> value.to_string
-  assert "'Say \\'hello\\''" == value.text("Say 'hello'") |> value.to_string
+  assert "'It''s working'" == value.text("It's working") |> value.to_string
+  assert "'Say ''hello'''" == value.text("Say 'hello'") |> value.to_string
 }
 
 pub fn bytea_to_string_test() {
@@ -195,6 +195,7 @@ pub fn interval_to_string_test() {
 pub fn enum_to_string_test() {
   assert "'active'" == value.enum("active") |> value.to_string
   assert "'pending'" == value.enum("pending") |> value.to_string
+  assert "'it''s'" == value.enum("it's") |> value.to_string
 }
 
 pub fn json_to_string_test() {
@@ -206,6 +207,9 @@ pub fn json_to_string_test() {
 
   let val = json.array([1, 2, 3], of: json.int) |> value.json
   assert "'[1,2,3]'" == val |> value.to_string
+
+  let val = json.object([#("name", json.string("O'Brien"))]) |> value.json
+  assert "'{\"name\":\"O''Brien\"}'" == val |> value.to_string
 }
 
 // Decode tests

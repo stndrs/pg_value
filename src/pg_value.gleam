@@ -178,8 +178,11 @@ pub fn to_string(value: Value) -> String {
     Array(vals) -> array_to_string(vals)
     Uuid(val) -> uuid_to_string(val)
     Hstore(val) -> hstore_to_string(val)
-    Enum(val) -> single_quote(val)
-    Json(val) -> json.to_string(val) |> single_quote
+    Enum(val) -> string.replace(in: val, each: "'", with: "''") |> single_quote
+    Json(val) ->
+      json.to_string(val)
+      |> string.replace(each: "'", with: "''")
+      |> single_quote
   }
 }
 
@@ -233,7 +236,7 @@ fn do_uuid_to_string(
 }
 
 fn text_to_string(text: String) -> String {
-  let val = string.replace(in: text, each: "'", with: "\\'")
+  let val = string.replace(in: text, each: "'", with: "''")
 
   single_quote(val)
 }
