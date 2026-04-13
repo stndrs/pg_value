@@ -190,6 +190,11 @@ pub fn interval_to_string_test() {
     |> value.to_string
 }
 
+pub fn enum_to_string_test() {
+  assert "'active'" == value.enum("active") |> value.to_string
+  assert "'pending'" == value.enum("pending") |> value.to_string
+}
+
 // Decode tests
 
 const postgres_gs_epoch = 63_113_904_000
@@ -468,6 +473,22 @@ pub fn decode_hstore_test() {
     decode.run(out, decode.dict(decode.string, decode.optional(decode.string)))
 
   assert data == decoded
+}
+
+pub fn decode_enum_test() {
+  use label <- list.each(["active", "pending", "archived"])
+
+  let in = <<label:utf8>>
+  let out = dynamic.string(label)
+
+  let assert Ok(result) = value.decode(in, enum_type())
+  assert out == result
+}
+
+pub fn decode_enum_error_test() {
+  let in = <<0xFF>>
+  let assert Error(msg) = value.decode(in, enum_type())
+  assert "invalid enum" == msg
 }
 
 pub fn decode_time_test() {
@@ -870,6 +891,25 @@ pub fn encode_interval_validation_error_test() {
   assert msg == "Attempted to encode interval_send as float4send"
 }
 
+pub fn encode_enum_test() {
+  let label = "active"
+  let val = value.enum(label)
+
+  let bits = <<label:utf8>>
+  let len = 6
+  let expected = <<len:big-int-size(32), bits:bits>>
+
+  let assert Ok(out) = value.encode(val, enum_type())
+
+  assert expected == out
+}
+
+pub fn encode_enum_validation_error_test() {
+  let assert Error(msg) = value.encode(value.enum("active"), float4())
+
+  assert msg == "Attempted to encode enum_send as float4send"
+}
+
 pub fn encode_timestamptz_test() {
   let expected_utc_int = -946_684_799_000_000
   let ts = timestamp.from_unix_seconds(1)
@@ -1174,6 +1214,12 @@ fn interval() {
   type_info.new(1186)
   |> type_info.typesend("interval_send")
   |> type_info.typereceive("interval_recv")
+}
+
+fn enum_type() {
+  type_info.new(0)
+  |> type_info.typesend("enum_send")
+  |> type_info.typereceive("enum_recv")
 }
 
 fn array(ti: type_info.TypeInfo) -> type_info.TypeInfo {
