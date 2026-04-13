@@ -21,7 +21,7 @@ Designed to be used by PostgreSQL client libraries — currently used by
 | `time` | `Time` | `gleam/time/calendar.TimeOfDay` |
 | `date` | `Date` | `gleam/time/calendar.Date` |
 | `timestamp` | `Timestamp` | `gleam/time/timestamp.Timestamp` |
-| `timestamptz` | `Timestamptz` | `gleam/time/timestamp.Timestamp` + `Offset` |
+| `timestamptz` | `Timestamptz` | `gleam/time/timestamp.Timestamp` + `gleam/time/duration.Duration` |
 | `interval` | `Interval` | `pg_value/interval.Interval` |
 | `json`, `jsonb` | `Json` | `gleam/json.Json` |
 | `hstore` | `Hstore` | `Dict(String, Option(String))` |

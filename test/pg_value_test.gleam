@@ -76,12 +76,19 @@ pub fn uuid_v7_to_string_test() {
 pub fn hstore_to_string_test() {
   let hstore =
     dict.new()
-    |> dict.insert("first", Some("foo"))
-    |> dict.insert("second", Some("bar"))
-    |> dict.insert("third", None)
+    |> dict.insert("name", Some("Alice"))
     |> value.hstore
 
-  assert "'first=>foo, second=>bar, third=>NULL'" == value.to_string(hstore)
+  assert "'\"name\"=>\"Alice\"'" == value.to_string(hstore)
+}
+
+pub fn hstore_to_string_null_test() {
+  let hstore =
+    dict.new()
+    |> dict.insert("deleted", None)
+    |> value.hstore
+
+  assert "'\"deleted\"=>NULL'" == value.to_string(hstore)
 }
 
 pub fn hstore_quote_escape_test() {
@@ -90,7 +97,7 @@ pub fn hstore_quote_escape_test() {
     |> dict.insert("single'", Some("'quote"))
     |> value.hstore
 
-  assert "'single''=>''quote'" == value.to_string(single_quote)
+  assert "'\"single''\"=>\"''quote\"'" == value.to_string(single_quote)
 }
 
 pub fn hstore_backslash_escape_test() {
@@ -99,7 +106,16 @@ pub fn hstore_backslash_escape_test() {
     |> dict.insert("back\\", Some("\\slash"))
     |> value.hstore
 
-  assert "'back\\\\=>\\\\slash'" == value.to_string(backslash)
+  assert "'\"back\\\\\"=>\"\\\\slash\"'" == value.to_string(backslash)
+}
+
+pub fn hstore_double_quote_escape_test() {
+  let double_quote =
+    dict.new()
+    |> dict.insert("say", Some("he said \"hi\""))
+    |> value.hstore
+
+  assert "'\"say\"=>\"he said \\\"hi\\\"\"'" == value.to_string(double_quote)
 }
 
 pub fn time_to_string_test() {
@@ -144,13 +160,13 @@ pub fn timestamp_to_string_test() {
 
 pub fn timestamptz_to_string_test() {
   let assert Ok(ts) = timestamp.parse_rfc3339("2025-01-15T14:30:45Z")
-  let offset = value.offset(0)
+  let offset = duration.seconds(0)
 
   assert "'2025-01-15T14:30:45Z'"
     == value.timestamptz(ts, offset) |> value.to_string
 
   let assert Ok(ts2) = timestamp.parse_rfc3339("2000-12-31T23:59:59.123456789Z")
-  let offset = value.offset(0)
+  let offset = duration.seconds(0)
 
   assert "'2000-12-31T23:59:59.123456789Z'"
     == value.timestamptz(ts2, offset) |> value.to_string
@@ -158,7 +174,9 @@ pub fn timestamptz_to_string_test() {
 
 pub fn timestamptz_with_positive_offset_to_string_test() {
   let assert Ok(ts) = timestamp.parse_rfc3339("2025-01-15T14:30:45Z")
-  let offset = value.offset(10) |> value.minutes(30)
+  let offset =
+    duration.hours(10)
+    |> duration.add(duration.minutes(30))
 
   assert "'2025-01-15T04:00:45Z'"
     == value.timestamptz(ts, offset) |> value.to_string
@@ -167,8 +185,8 @@ pub fn timestamptz_with_positive_offset_to_string_test() {
 pub fn timestamptz_with_negative_offset_to_string_test() {
   let assert Ok(ts) = timestamp.parse_rfc3339("2025-01-15T14:30:45Z")
   let offset =
-    value.offset(-6)
-    |> value.minutes(30)
+    duration.hours(-6)
+    |> duration.add(duration.minutes(-30))
 
   assert "'2025-01-15T21:00:45Z'"
     == value.timestamptz(ts, offset) |> value.to_string
@@ -352,7 +370,8 @@ pub fn decode_float4_test() {
   use valid <- list.map([0.0, 3.14, -42.5])
 
   let in = <<valid:big-float-size(32)>>
-  let out = dynamic.float(valid)
+  let assert <<expected:big-float-size(32)>> = in
+  let out = dynamic.float(expected)
 
   let assert Ok(result) = value.decode(in, float4())
 
@@ -827,24 +846,34 @@ pub fn encode_uuid_error_test() {
 pub fn encode_hstore_test() {
   let value =
     dict.new()
-    |> dict.insert("first", Some("foo"))
-    |> dict.insert("second", Some("bar"))
-    |> dict.insert("third", None)
+    |> dict.insert("name", Some("Alice"))
     |> value.hstore
 
   let expected = <<
-    50:big-int-size(32),
-    3:big-int-size(32),
+    21:big-int-size(32),
+    1:big-int-size(32),
+    4:big-int-size(32),
+    "name":utf8,
     5:big-int-size(32),
-    "first":utf8,
-    3:big-int-size(32),
-    "foo":utf8,
-    6:big-int-size(32),
-    "second":utf8,
-    3:big-int-size(32),
-    "bar":utf8,
-    5:big-int-size(32),
-    "third":utf8,
+    "Alice":utf8,
+  >>
+
+  let assert Ok(encoded) = value.encode(value, hstore())
+
+  assert expected == encoded
+}
+
+pub fn encode_hstore_null_value_test() {
+  let value =
+    dict.new()
+    |> dict.insert("gone", None)
+    |> value.hstore
+
+  let expected = <<
+    16:big-int-size(32),
+    1:big-int-size(32),
+    4:big-int-size(32),
+    "gone":utf8,
     -1:big-int-size(32),
   >>
 
@@ -1001,7 +1030,7 @@ pub fn encode_json_validation_error_test() {
 pub fn encode_timestamptz_test() {
   let expected_utc_int = -946_684_799_000_000
   let ts = timestamp.from_unix_seconds(1)
-  let offset = value.offset(0)
+  let offset = duration.seconds(0)
 
   let expected = <<
     8:big-int-size(32),
@@ -1019,7 +1048,7 @@ pub fn encode_positive_offset_timestamptz_test() {
   let expected_utc_int = -946_684_800_000_000
   let ts = timestamp.from_unix_seconds(1)
 
-  let offset = value.offset(10)
+  let offset = duration.hours(10)
 
   let dur =
     int.multiply(10, 60)
@@ -1047,8 +1076,8 @@ pub fn encode_negative_offset_timestamptz_test() {
   let expected_utc_int = -946_684_800_000_000
   let ts = timestamp.from_unix_seconds(1)
   let offset =
-    value.offset(-2)
-    |> value.minutes(30)
+    duration.hours(-2)
+    |> duration.add(duration.minutes(-30))
 
   let dur =
     int.multiply(2, 60)
@@ -1074,7 +1103,7 @@ pub fn encode_negative_offset_timestamptz_test() {
 
 pub fn encode_timestamptz_validation_error_test() {
   let assert Error(msg) =
-    value.timestamptz(timestamp.system_time(), value.offset(8))
+    value.timestamptz(timestamp.system_time(), duration.hours(8))
     |> value.encode(float4())
 
   assert msg == "Attempted to encode timestamptz_send as float4send"

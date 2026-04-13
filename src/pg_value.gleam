@@ -22,33 +22,6 @@ import gleam/time/timestamp
 import pg_value/interval
 import pg_value/type_info
 
-/// `Offset` represents a UTC offset. `Timestamptz` is composed
-/// of a [`gleam/time/timestamp.Timestamp`][1] and `Offset`. The offset will be
-/// applied to the timestamp when being encoded.
-///
-/// A timestamp with a positive offset represents some time in
-/// the future, relative to UTC.
-/// A timestamp with a negative offset represents some time in
-/// the past, relative to UTC.
-///
-/// `Offset`s will be subtracted from the `gleam/time/timestamp.Timestamp`
-/// so the encoded value is a UTC timestamp.
-///
-/// [1]: https://hexdocs.pm/gleam_time/gleam/time/timestamp.html
-pub type Offset {
-  Offset(hours: Int, minutes: Int)
-}
-
-/// Returns an Offset with the provided hours and 0 minutes.
-pub fn offset(hours: Int) -> Offset {
-  Offset(hours:, minutes: 0)
-}
-
-/// Applies some number of minutes to the Offset
-pub fn minutes(offset: Offset, minutes: Int) -> Offset {
-  Offset(..offset, minutes:)
-}
-
 /// The `Value` type represents PostgreSQL data types. Values can be encoded
 /// to PostgreSQL's binary format. `Value`s can be used when interacting with
 /// PostgreSQL databases through client libraries like [pgl][1].
@@ -64,7 +37,7 @@ pub type Value {
   Time(calendar.TimeOfDay)
   Date(calendar.Date)
   Timestamp(timestamp.Timestamp)
-  Timestamptz(timestamp.Timestamp, Offset)
+  Timestamptz(timestamp.Timestamp, duration.Duration)
   Interval(interval.Interval)
   Array(List(Value))
   Uuid(BitArray)
@@ -121,7 +94,10 @@ pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
   Timestamp(timestamp)
 }
 
-pub fn timestamptz(timestamp: timestamp.Timestamp, offset: Offset) -> Value {
+pub fn timestamptz(
+  timestamp: timestamp.Timestamp,
+  offset: duration.Duration,
+) -> Value {
   Timestamptz(timestamp, offset)
 }
 
@@ -191,10 +167,10 @@ fn hstore_to_string(hstore: Dict(String, Option(String))) -> String {
   |> dict.to_list
   |> list.map(with: fn(key_val) {
     let #(key, val) = key_val
-    let key = escape(key)
+    let key = "\"" <> escape(key) <> "\""
 
     let val = case val {
-      Some(val) -> escape(val)
+      Some(val) -> "\"" <> escape(val) <> "\""
       None -> "NULL"
     }
 
@@ -306,24 +282,15 @@ fn timestamp_to_string(timestamp: timestamp.Timestamp) -> String {
 
 fn timestamptz_to_string(
   timestamp: timestamp.Timestamp,
-  offset: Offset,
+  offset: duration.Duration,
 ) -> String {
-  offset_to_duration(offset)
+  negate_duration(offset)
   |> timestamp.add(timestamp, _)
   |> timestamp_to_string
 }
 
-fn offset_to_duration(offset: Offset) -> duration.Duration {
-  let sign = case offset.hours < 0 {
-    True -> 1
-    False -> -1
-  }
-
-  int.absolute_value(offset.hours)
-  |> int.multiply(60)
-  |> int.add(offset.minutes)
-  |> int.multiply(sign)
-  |> duration.minutes
+fn negate_duration(d: duration.Duration) -> duration.Duration {
+  duration.difference(d, duration.seconds(0))
 }
 
 fn single_quote(value: String) -> String {
@@ -771,16 +738,16 @@ fn encode_timestamp(
 
 fn encode_timestamptz(
   timestamp: timestamp.Timestamp,
-  offset: Offset,
+  offset: duration.Duration,
   info: type_info.TypeInfo,
 ) -> Result(BitArray, String) {
   use <- validate_typesend("timestamptz_send", info)
 
-  let offset_dur = offset_to_duration(offset)
+  let negated_offset = negate_duration(offset)
 
   let timestamp_int =
     unix_seconds_before_postgres_epoch()
-    |> duration.add(offset_dur)
+    |> duration.add(negated_offset)
     |> timestamp.add(timestamp, _)
     |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
 
@@ -945,7 +912,7 @@ fn decode_int8(bits: BitArray) -> Result(Dynamic, String) {
 fn decode_float4(bits: BitArray) -> Result(Dynamic, String) {
   case bits {
     <<value:big-float-size(32)>> -> {
-      float.to_precision(value, 4)
+      value
       |> dynamic.float
       |> Ok
     }
@@ -956,7 +923,7 @@ fn decode_float4(bits: BitArray) -> Result(Dynamic, String) {
 fn decode_float8(bits: BitArray) -> Result(Dynamic, String) {
   case bits {
     <<value:big-float-size(64)>> -> {
-      float.to_precision(value, 8)
+      value
       |> dynamic.float
       |> Ok
     }
@@ -1204,13 +1171,13 @@ const int8_max = 0x7FFFFFFFFFFFFFFF
 
 const int8_min = 0x8000000000000000
 
-// Seconds between Jan 1, 0001 and Dec 31, 1999
+// Seconds between Jan 1, 0001 and Jan 1, 2000
 const postgres_gs_epoch = 63_113_904_000
 
 // Seconds between Jan 1, 0001 and Jan 1, 1970
 const gs_to_unix_epoch = 62_167_219_200
 
-// Days between Jan 1, 0001 and Dec 31, 1999
+// Days between Jan 1, 0001 and Jan 1, 2000
 const postgres_gd_epoch = 730_485
 
 const usecs_per_sec = 1_000_000
