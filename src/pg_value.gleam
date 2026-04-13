@@ -11,6 +11,7 @@ import gleam/dynamic.{type Dynamic}
 import gleam/dynamic/decode
 import gleam/float
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/result
@@ -69,6 +70,7 @@ pub type Value {
   Uuid(BitArray)
   Hstore(Dict(String, Option(String)))
   Enum(String)
+  Json(json.Json)
 }
 
 pub const null = Null
@@ -131,6 +133,10 @@ pub fn enum(label: String) -> Value {
   Enum(label)
 }
 
+pub fn json(json: json.Json) -> Value {
+  Json(json)
+}
+
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
   |> list.map(kind)
@@ -172,7 +178,11 @@ pub fn to_string(value: Value) -> String {
     Array(vals) -> array_to_string(vals)
     Uuid(val) -> uuid_to_string(val)
     Hstore(val) -> hstore_to_string(val)
-    Enum(val) -> single_quote(val)
+    Enum(val) -> string.replace(in: val, each: "'", with: "''") |> single_quote
+    Json(val) ->
+      json.to_string(val)
+      |> string.replace(each: "'", with: "''")
+      |> single_quote
   }
 }
 
@@ -226,7 +236,7 @@ fn do_uuid_to_string(
 }
 
 fn text_to_string(text: String) -> String {
-  let val = string.replace(in: text, each: "'", with: "\\'")
+  let val = string.replace(in: text, each: "'", with: "''")
 
   single_quote(val)
 }
@@ -382,6 +392,7 @@ pub fn encode(
     Uuid(val) -> encode_uuid(val, info)
     Hstore(val) -> encode_hstore(val, info)
     Enum(val) -> encode_enum(val, info)
+    Json(val) -> encode_json(val, info)
   }
 }
 
@@ -660,6 +671,26 @@ fn encode_enum(
   Ok(<<len:big-int-size(32), bits:bits>>)
 }
 
+fn encode_json(
+  json_val: json.Json,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, String) {
+  let json_string = json.to_string(json_val)
+  let json_bits = bit_array.from_string(json_string)
+
+  case info.typesend {
+    "json_send" -> {
+      let len = bit_array.byte_size(json_bits)
+      Ok(<<len:big-int-size(32), json_bits:bits>>)
+    }
+    "jsonb_send" -> {
+      let len = bit_array.byte_size(json_bits) + 1
+      Ok(<<len:big-int-size(32), 1:int-size(8), json_bits:bits>>)
+    }
+    _ -> Error("Attempted to encode json as " <> info.typesend)
+  }
+}
+
 fn encode_bytea(
   bits: BitArray,
   info: type_info.TypeInfo,
@@ -794,6 +825,8 @@ pub fn decode(
     "timestamptz_recv" -> decode_timestamp(bits)
     "interval_recv" -> decode_interval(bits)
     "enum_recv" -> decode_enum(bits)
+    "json_recv" -> decode_json(bits)
+    "jsonb_recv" -> decode_jsonb(bits)
     _ -> Error("Unsupported type")
   }
 }
@@ -947,6 +980,22 @@ fn decode_enum(bits: BitArray) -> Result(Dynamic, String) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
   |> result.replace_error("invalid enum")
+}
+
+fn decode_json(bits: BitArray) -> Result(Dynamic, String) {
+  bit_array.to_string(bits)
+  |> result.map(dynamic.string)
+  |> result.replace_error("invalid json")
+}
+
+fn decode_jsonb(bits: BitArray) -> Result(Dynamic, String) {
+  case bits {
+    <<1:int-size(8), rest:bits>> ->
+      bit_array.to_string(rest)
+      |> result.map(dynamic.string)
+      |> result.replace_error("invalid jsonb")
+    _ -> Error("invalid jsonb")
+  }
 }
 
 fn decode_bytea(bits: BitArray) -> Result(Dynamic, String) {

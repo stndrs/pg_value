@@ -1,8 +1,10 @@
+import gleam/bit_array
 import gleam/dict
 import gleam/dynamic
 import gleam/dynamic/decode
 import gleam/function
 import gleam/int
+import gleam/json
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/result
@@ -44,8 +46,8 @@ pub fn float_to_string_test() {
 pub fn text_to_string_test() {
   assert "'hello'" == value.text("hello") |> value.to_string
   assert "''" == value.text("") |> value.to_string
-  assert "'It\\'s working'" == value.text("It's working") |> value.to_string
-  assert "'Say \\'hello\\''" == value.text("Say 'hello'") |> value.to_string
+  assert "'It''s working'" == value.text("It's working") |> value.to_string
+  assert "'Say ''hello'''" == value.text("Say 'hello'") |> value.to_string
 }
 
 pub fn bytea_to_string_test() {
@@ -193,6 +195,21 @@ pub fn interval_to_string_test() {
 pub fn enum_to_string_test() {
   assert "'active'" == value.enum("active") |> value.to_string
   assert "'pending'" == value.enum("pending") |> value.to_string
+  assert "'it''s'" == value.enum("it's") |> value.to_string
+}
+
+pub fn json_to_string_test() {
+  let val = json.object([#("key", json.string("value"))]) |> value.json
+  assert "'{\"key\":\"value\"}'" == val |> value.to_string
+
+  let val = json.null() |> value.json
+  assert "'null'" == val |> value.to_string
+
+  let val = json.array([1, 2, 3], of: json.int) |> value.json
+  assert "'[1,2,3]'" == val |> value.to_string
+
+  let val = json.object([#("name", json.string("O'Brien"))]) |> value.json
+  assert "'{\"name\":\"O''Brien\"}'" == val |> value.to_string
 }
 
 // Decode tests
@@ -489,6 +506,43 @@ pub fn decode_enum_error_test() {
   let in = <<0xFF>>
   let assert Error(msg) = value.decode(in, enum_type())
   assert "invalid enum" == msg
+}
+
+pub fn decode_json_test() {
+  let json_str = "{\"key\":\"value\"}"
+  let in = <<json_str:utf8>>
+  let out = dynamic.string(json_str)
+
+  let assert Ok(result) = value.decode(in, json_type())
+  assert out == result
+}
+
+pub fn decode_json_error_test() {
+  let in = <<0xFF>>
+  let assert Error(msg) = value.decode(in, json_type())
+  assert "invalid json" == msg
+}
+
+pub fn decode_jsonb_test() {
+  let json_str = "{\"key\":\"value\"}"
+  let in = <<1:int-size(8), json_str:utf8>>
+  let out = dynamic.string(json_str)
+
+  let assert Ok(result) = value.decode(in, jsonb_type())
+  assert out == result
+}
+
+pub fn decode_jsonb_error_test() {
+  // Wrong version byte
+  let in = <<2:int-size(8), "{}":utf8>>
+  let assert Error(msg) = value.decode(in, jsonb_type())
+  assert "invalid jsonb" == msg
+}
+
+pub fn decode_jsonb_empty_error_test() {
+  let in = <<>>
+  let assert Error(msg) = value.decode(in, jsonb_type())
+  assert "invalid jsonb" == msg
 }
 
 pub fn decode_time_test() {
@@ -910,6 +964,40 @@ pub fn encode_enum_validation_error_test() {
   assert msg == "Attempted to encode enum_send as float4send"
 }
 
+pub fn encode_json_test() {
+  let json_val = json.object([#("a", json.int(1))])
+  let val = value.json(json_val)
+  let json_str = "{\"a\":1}"
+  let json_bits = <<json_str:utf8>>
+  let len = bit_array.byte_size(json_bits)
+  let expected = <<len:big-int-size(32), json_bits:bits>>
+
+  let assert Ok(out) = value.encode(val, json_type())
+
+  assert expected == out
+}
+
+pub fn encode_jsonb_test() {
+  let json_val = json.object([#("a", json.int(1))])
+  let val = value.json(json_val)
+  let json_str = "{\"a\":1}"
+  let json_bits = <<json_str:utf8>>
+  let len = bit_array.byte_size(json_bits) + 1
+  let expected = <<len:big-int-size(32), 1:int-size(8), json_bits:bits>>
+
+  let assert Ok(out) = value.encode(val, jsonb_type())
+
+  assert expected == out
+}
+
+pub fn encode_json_validation_error_test() {
+  let val = json.null() |> value.json
+
+  let assert Error(msg) = value.encode(val, float4())
+
+  assert msg == "Attempted to encode json as float4send"
+}
+
 pub fn encode_timestamptz_test() {
   let expected_utc_int = -946_684_799_000_000
   let ts = timestamp.from_unix_seconds(1)
@@ -1227,4 +1315,16 @@ fn array(ti: type_info.TypeInfo) -> type_info.TypeInfo {
   |> type_info.typesend("array_send")
   |> type_info.typereceive("array_recv")
   |> type_info.elem_type(Some(ti))
+}
+
+fn json_type() {
+  type_info.new(114)
+  |> type_info.typesend("json_send")
+  |> type_info.typereceive("json_recv")
+}
+
+fn jsonb_type() {
+  type_info.new(3802)
+  |> type_info.typesend("jsonb_send")
+  |> type_info.typereceive("jsonb_recv")
 }
