@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.0
+
+- Added `Enum` value type with encoder and decoder
+- Added `Json` value type with json and jsonb encoder and decoder
+
 ## 2.0.0
 
 - Added `Uuid` value type with encoder
