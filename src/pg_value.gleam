@@ -52,22 +52,27 @@ pub const true = Bool(True)
 
 pub const false = Bool(False)
 
+/// Returns a Bool value.
 pub fn bool(bool: Bool) -> Value {
   Bool(bool)
 }
 
+/// Returns an Int value.
 pub fn int(int: Int) -> Value {
   Int(int)
 }
 
+/// Returns a Float value.
 pub fn float(float: Float) -> Value {
   Float(float)
 }
 
+/// Returns a Text value.
 pub fn text(text: String) -> Value {
   Text(text)
 }
 
+/// Returns a Bytea value.
 pub fn bytea(bytea: BitArray) -> Value {
   Bytea(bytea)
 }
@@ -78,22 +83,27 @@ pub fn uuid(uuid: BitArray) -> Value {
   Uuid(uuid)
 }
 
+/// Returns an Hstore value. Keys map to optional string values.
 pub fn hstore(hstore: Dict(String, Option(String))) -> Value {
   Hstore(hstore)
 }
 
+/// Returns a Time value.
 pub fn time(time_of_day: calendar.TimeOfDay) -> Value {
   Time(time_of_day)
 }
 
+/// Returns a Date value.
 pub fn date(date: calendar.Date) -> Value {
   Date(date)
 }
 
+/// Returns a Timestamp value.
 pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
   Timestamp(timestamp)
 }
 
+/// Returns a Timestamp value with a timezone offset.
 pub fn timestamptz(
   timestamp: timestamp.Timestamp,
   offset: duration.Duration,
@@ -101,18 +111,22 @@ pub fn timestamptz(
   Timestamptz(timestamp, offset)
 }
 
+/// Returns an Interval value.
 pub fn interval(interval: interval.Interval) -> Value {
   Interval(interval)
 }
 
+/// Returns an Enum value with the given label.
 pub fn enum(label: String) -> Value {
   Enum(label)
 }
 
+/// Returns a Json value.
 pub fn json(json: json.Json) -> Value {
   Json(json)
 }
 
+/// Returns an Array value. Each element is converted using the provided function.
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
   |> list.map(kind)
@@ -304,6 +318,7 @@ fn pad_zero(n: Int) -> String {
   }
 }
 
+/// Returns a decoder for `TimeOfDay` values.
 pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
   use hours <- decode.field(0, decode.int)
   use minutes <- decode.field(1, decode.int)
@@ -316,6 +331,7 @@ pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
   |> decode.success
 }
 
+/// Returns a decoder for `Timestamp` values.
 pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   use microseconds <- decode.map(decode.int)
   let seconds = microseconds / 1_000_000
@@ -323,6 +339,7 @@ pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   timestamp.from_unix_seconds_and_nanoseconds(seconds, nanoseconds)
 }
 
+/// Returns a decoder for `Date` values.
 pub fn date_decoder() -> decode.Decoder(calendar.Date) {
   use year <- decode.field(0, decode.int)
   use month <- decode.field(1, decode.int)
