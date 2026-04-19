@@ -230,6 +230,11 @@ pub fn json_to_string_test() {
   assert "'{\"name\":\"O''Brien\"}'" == val |> value.to_string
 }
 
+pub fn nullable_test() {
+  assert value.Int(10) == value.nullable(value.int, Some(10))
+  assert value.Null == value.nullable(value.int, None)
+}
+
 // Decode tests
 
 const postgres_gs_epoch = 63_113_904_000
@@ -653,6 +658,19 @@ pub fn array_error_test() {
   let assert Error(msg) = value.decode(in, array(int2()))
 
   assert out == msg
+}
+
+pub fn decode_array_test() {
+  let in = <<
+    1:big-int-size(32), 0:big-int-size(32), 23:big-int-size(32),
+    2:big-int-size(32), 1:big-int-size(32), 4:big-int-size(32),
+    10:big-int-size(32), 4:big-int-size(32), 20:big-int-size(32),
+  >>
+
+  let assert Ok(result) = value.decode(in, array(int4()))
+
+  let decoder = decode.list(decode.int)
+  let assert Ok([10, 20]) = decode.run(result, decoder)
 }
 
 // Encode tests //
@@ -1215,6 +1233,23 @@ pub fn encode_array_validation_error_test() {
     value.encode(value.array([10, 12], of: value.int), float4())
 
   assert msg == "Attempted to encode array_send as float4send"
+}
+
+pub fn encode_bytea_test() {
+  let data = <<1, 2, 3, 4, 5>>
+  let expected = <<5:big-int-size(32), 1, 2, 3, 4, 5>>
+
+  let assert Ok(out) = value.encode(value.bytea(data), bytea())
+
+  assert expected == out
+}
+
+pub fn encode_bytea_empty_test() {
+  let expected = <<0:big-int-size(32)>>
+
+  let assert Ok(out) = value.encode(value.bytea(<<>>), bytea())
+
+  assert expected == out
 }
 
 // TypeInfo helpers
