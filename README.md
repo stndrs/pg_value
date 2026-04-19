@@ -5,7 +5,7 @@
 [![Hex Docs](https://img.shields.io/badge/hex-docs-ffaff3)](https://hexdocs.pm/pg_value/)
 
 PostgreSQL data types, binary encoders, and binary decoders for Gleam.
-Designed to be used by PostgreSQL client libraries — currently used by
+Designed to be used by PostgreSQL client libraries. Currently used by
 [pgl](https://github.com/stndrs/pgl).
 
 ## Supported Types
