@@ -22,33 +22,6 @@ import gleam/time/timestamp
 import pg_value/interval
 import pg_value/type_info
 
-/// `Offset` represents a UTC offset. `Timestamptz` is composed
-/// of a [`gleam/time/timestamp.Timestamp`][1] and `Offset`. The offset will be
-/// applied to the timestamp when being encoded.
-///
-/// A timestamp with a positive offset represents some time in
-/// the future, relative to UTC.
-/// A timestamp with a negative offset represents some time in
-/// the past, relative to UTC.
-///
-/// `Offset`s will be subtracted from the `gleam/time/timestamp.Timestamp`
-/// so the encoded value is a UTC timestamp.
-///
-/// [1]: https://hexdocs.pm/gleam_time/gleam/time/timestamp.html
-pub type Offset {
-  Offset(hours: Int, minutes: Int)
-}
-
-/// Returns an Offset with the provided hours and 0 minutes.
-pub fn offset(hours: Int) -> Offset {
-  Offset(hours:, minutes: 0)
-}
-
-/// Applies some number of minutes to the Offset
-pub fn minutes(offset: Offset, minutes: Int) -> Offset {
-  Offset(..offset, minutes:)
-}
-
 /// The `Value` type represents PostgreSQL data types. Values can be encoded
 /// to PostgreSQL's binary format. `Value`s can be used when interacting with
 /// PostgreSQL databases through client libraries like [pgl][1].
@@ -64,7 +37,7 @@ pub type Value {
   Time(calendar.TimeOfDay)
   Date(calendar.Date)
   Timestamp(timestamp.Timestamp)
-  Timestamptz(timestamp.Timestamp, Offset)
+  Timestamptz(timestamp.Timestamp, duration.Duration)
   Interval(interval.Interval)
   Array(List(Value))
   Uuid(BitArray)
@@ -79,22 +52,27 @@ pub const true = Bool(True)
 
 pub const false = Bool(False)
 
+/// Returns a Bool value.
 pub fn bool(bool: Bool) -> Value {
   Bool(bool)
 }
 
+/// Returns an Int value.
 pub fn int(int: Int) -> Value {
   Int(int)
 }
 
+/// Returns a Float value.
 pub fn float(float: Float) -> Value {
   Float(float)
 }
 
+/// Returns a Text value.
 pub fn text(text: String) -> Value {
   Text(text)
 }
 
+/// Returns a Bytea value.
 pub fn bytea(bytea: BitArray) -> Value {
   Bytea(bytea)
 }
@@ -105,38 +83,50 @@ pub fn uuid(uuid: BitArray) -> Value {
   Uuid(uuid)
 }
 
+/// Returns an Hstore value. Keys map to optional string values.
 pub fn hstore(hstore: Dict(String, Option(String))) -> Value {
   Hstore(hstore)
 }
 
+/// Returns a Time value.
 pub fn time(time_of_day: calendar.TimeOfDay) -> Value {
   Time(time_of_day)
 }
 
+/// Returns a Date value.
 pub fn date(date: calendar.Date) -> Value {
   Date(date)
 }
 
+/// Returns a Timestamp value.
 pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
   Timestamp(timestamp)
 }
 
-pub fn timestamptz(timestamp: timestamp.Timestamp, offset: Offset) -> Value {
+/// Returns a Timestamp value with a timezone offset.
+pub fn timestamptz(
+  timestamp: timestamp.Timestamp,
+  offset: duration.Duration,
+) -> Value {
   Timestamptz(timestamp, offset)
 }
 
+/// Returns an Interval value.
 pub fn interval(interval: interval.Interval) -> Value {
   Interval(interval)
 }
 
+/// Returns an Enum value with the given label.
 pub fn enum(label: String) -> Value {
   Enum(label)
 }
 
+/// Returns a Json value.
 pub fn json(json: json.Json) -> Value {
   Json(json)
 }
 
+/// Returns an Array value. Each element is converted using the provided function.
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
   |> list.map(kind)
@@ -191,10 +181,10 @@ fn hstore_to_string(hstore: Dict(String, Option(String))) -> String {
   |> dict.to_list
   |> list.map(with: fn(key_val) {
     let #(key, val) = key_val
-    let key = escape(key)
+    let key = "\"" <> escape(key) <> "\""
 
     let val = case val {
-      Some(val) -> escape(val)
+      Some(val) -> "\"" <> escape(val) <> "\""
       None -> "NULL"
     }
 
@@ -306,24 +296,15 @@ fn timestamp_to_string(timestamp: timestamp.Timestamp) -> String {
 
 fn timestamptz_to_string(
   timestamp: timestamp.Timestamp,
-  offset: Offset,
+  offset: duration.Duration,
 ) -> String {
-  offset_to_duration(offset)
+  negate_duration(offset)
   |> timestamp.add(timestamp, _)
   |> timestamp_to_string
 }
 
-fn offset_to_duration(offset: Offset) -> duration.Duration {
-  let sign = case offset.hours < 0 {
-    True -> 1
-    False -> -1
-  }
-
-  int.absolute_value(offset.hours)
-  |> int.multiply(60)
-  |> int.add(offset.minutes)
-  |> int.multiply(sign)
-  |> duration.minutes
+fn negate_duration(d: duration.Duration) -> duration.Duration {
+  duration.difference(d, duration.seconds(0))
 }
 
 fn single_quote(value: String) -> String {
@@ -337,6 +318,7 @@ fn pad_zero(n: Int) -> String {
   }
 }
 
+/// Returns a decoder for `TimeOfDay` values.
 pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
   use hours <- decode.field(0, decode.int)
   use minutes <- decode.field(1, decode.int)
@@ -349,6 +331,7 @@ pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
   |> decode.success
 }
 
+/// Returns a decoder for `Timestamp` values.
 pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   use microseconds <- decode.map(decode.int)
   let seconds = microseconds / 1_000_000
@@ -356,6 +339,7 @@ pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   timestamp.from_unix_seconds_and_nanoseconds(seconds, nanoseconds)
 }
 
+/// Returns a decoder for `Date` values.
 pub fn date_decoder() -> decode.Decoder(calendar.Date) {
   use year <- decode.field(0, decode.int)
   use month <- decode.field(1, decode.int)
@@ -771,16 +755,16 @@ fn encode_timestamp(
 
 fn encode_timestamptz(
   timestamp: timestamp.Timestamp,
-  offset: Offset,
+  offset: duration.Duration,
   info: type_info.TypeInfo,
 ) -> Result(BitArray, String) {
   use <- validate_typesend("timestamptz_send", info)
 
-  let offset_dur = offset_to_duration(offset)
+  let negated_offset = negate_duration(offset)
 
   let timestamp_int =
     unix_seconds_before_postgres_epoch()
-    |> duration.add(offset_dur)
+    |> duration.add(negated_offset)
     |> timestamp.add(timestamp, _)
     |> to_microseconds(timestamp.to_unix_seconds_and_nanoseconds)
 
@@ -945,7 +929,7 @@ fn decode_int8(bits: BitArray) -> Result(Dynamic, String) {
 fn decode_float4(bits: BitArray) -> Result(Dynamic, String) {
   case bits {
     <<value:big-float-size(32)>> -> {
-      float.to_precision(value, 4)
+      value
       |> dynamic.float
       |> Ok
     }
@@ -956,7 +940,7 @@ fn decode_float4(bits: BitArray) -> Result(Dynamic, String) {
 fn decode_float8(bits: BitArray) -> Result(Dynamic, String) {
   case bits {
     <<value:big-float-size(64)>> -> {
-      float.to_precision(value, 8)
+      value
       |> dynamic.float
       |> Ok
     }
@@ -1204,13 +1188,13 @@ const int8_max = 0x7FFFFFFFFFFFFFFF
 
 const int8_min = 0x8000000000000000
 
-// Seconds between Jan 1, 0001 and Dec 31, 1999
+// Seconds between Jan 1, 0001 and Jan 1, 2000
 const postgres_gs_epoch = 63_113_904_000
 
 // Seconds between Jan 1, 0001 and Jan 1, 1970
 const gs_to_unix_epoch = 62_167_219_200
 
-// Days between Jan 1, 0001 and Dec 31, 1999
+// Days between Jan 1, 0001 and Jan 1, 2000
 const postgres_gd_epoch = 730_485
 
 const usecs_per_sec = 1_000_000

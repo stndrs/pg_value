@@ -3,6 +3,7 @@ import gleam/dynamic/decode.{type Decoder}
 import gleam/int
 import gleam/string
 
+/// Represents a PostgreSQL interval with months, days, seconds, and microseconds.
 pub type Interval {
   Interval(months: Int, days: Int, seconds: Int, microseconds: Int)
 }
