@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.0.1
+
+- Updated `gleam_stdlib`
+
 ## 3.0.0
 
 ### Added
