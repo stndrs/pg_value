@@ -149,6 +149,12 @@ pub fn date_to_string_test() {
   assert "'2000-12-31'"
     == value.date(calendar.Date(2000, calendar.December, 31))
     |> value.to_string
+  assert "'0033-01-15'"
+    == value.date(calendar.Date(33, calendar.January, 15))
+    |> value.to_string
+  assert "'0001-01-01'"
+    == value.date(calendar.Date(1, calendar.January, 1))
+    |> value.to_string
 }
 
 pub fn timestamp_to_string_test() {

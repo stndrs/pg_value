@@ -284,7 +284,7 @@ fn bytea_to_string(bytea: BitArray) -> String {
 }
 
 fn date_to_string(date: calendar.Date) -> String {
-  let year = int.to_string(date.year)
+  let year = pad(date.year, 4)
   let month = calendar.month_to_int(date.month) |> pad_zero
   let day = pad_zero(date.day)
 
