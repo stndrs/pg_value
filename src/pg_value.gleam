@@ -724,6 +724,7 @@ fn encode_text(
     "varcharsend" -> encoder(text)
     "textsend" -> encoder(text)
     "charsend" -> encoder(text)
+    "bpcharsend" -> encoder(text)
     "namesend" -> encoder(text)
     _ -> Error("Attempted to encode '" <> text <> "' as " <> info.typesend)
   }
@@ -915,6 +916,7 @@ pub fn decode(
     "varcharrecv" -> decode_varchar(bits)
     "namerecv" -> decode_text(bits)
     "charrecv" -> decode_text(bits)
+    "bpcharrecv" -> decode_text(bits)
     "bytearecv" -> decode_bytea(bits)
     "uuid_recv" -> decode_uuid(bits)
     "hstore_recv" -> decode_hstore(bits)

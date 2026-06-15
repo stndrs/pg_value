@@ -15,18 +15,22 @@ Designed to be used by PostgreSQL client libraries. Currently used by
 | `boolean` | `Bool` | `Bool` |
 | `smallint`, `integer`, `bigint`, `oid` | `Int` | `Int` |
 | `real`, `double precision` | `Float` | `Float` |
-| `text`, `varchar`, `char`, `name` | `Text` | `String` |
+| `text`, `varchar`, `char(n)`/`bpchar`, `name` | `Text` | `String` |
 | `bytea` | `Bytea` | `BitArray` |
 | `uuid` | `Uuid` | `BitArray` |
 | `time` | `Time` | `gleam/time/calendar.TimeOfDay` |
 | `date` | `Date` | `gleam/time/calendar.Date` |
 | `timestamp` | `Timestamp` | `gleam/time/timestamp.Timestamp` |
-| `timestamptz` | `Timestamptz` | `gleam/time/timestamp.Timestamp` + `gleam/time/duration.Duration` || `interval` | `Interval` | `pg_value/interval.Interval` |
+| `timestamptz` | `Timestamptz` | `gleam/time/timestamp.Timestamp` + `gleam/time/duration.Duration` |
+| `interval` | `Interval` | `pg_value/interval.Interval` |
 | `json`, `jsonb` | `Json` | `gleam/json.Json` |
 | `hstore` | `Hstore` | `Dict(String, Option(String))` |
 | enum types | `Enum` | `String` |
 | arrays | `Array` | `List(Value)` |
 | | `Null` | |
+
+The text path covers `char(n)` (`bpchar`). The internal single-byte `"char"`
+type (`charsend`, oid 18) is also handled as text.
 
 ## Usage
 

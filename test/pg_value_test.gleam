@@ -481,6 +481,26 @@ pub fn decode_char_test() {
   assert out == result
 }
 
+pub fn decode_bpchar_test() {
+  use valid <- list.map(["A", "padded   ", ""])
+
+  let in = <<valid:utf8>>
+  let out = dynamic.string(valid)
+
+  let assert Ok(result) = value.decode(in, bpchar())
+
+  assert out == result
+}
+
+pub fn encode_bpchar_test() {
+  let in = value.text("abc")
+  let expected = <<3:big-int-size(32), "abc":utf8>>
+
+  let assert Ok(out) = value.encode(in, bpchar())
+
+  assert expected == out
+}
+
 pub fn decode_name_test() {
   use valid <- list.map(["table_name", "", "column_name"])
 
@@ -1349,6 +1369,12 @@ fn char() {
   type_info.new(18)
   |> type_info.typesend("charsend")
   |> type_info.typereceive("charrecv")
+}
+
+fn bpchar() {
+  type_info.new(1042)
+  |> type_info.typesend("bpcharsend")
+  |> type_info.typereceive("bpcharrecv")
 }
 
 fn name() {
