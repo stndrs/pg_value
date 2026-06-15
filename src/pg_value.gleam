@@ -103,7 +103,14 @@ pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
   Timestamp(timestamp)
 }
 
-/// Returns a Timestamp value with a timezone offset.
+/// Returns a Timestamptz value with a timezone offset.
+///
+/// Note on convention: `encode` treats the `Timestamp` as a wall-clock time in
+/// the zone described by `offset` and subtracts the offset to produce the UTC
+/// instant on the wire. Decoding always yields the UTC instant with no offset.
+/// Consequently `decode(encode(Timestamptz(ts, off)))` equals `ts` only when
+/// `off` is zero. If your `Timestamp` is already an absolute UTC instant, pass
+/// `duration.seconds(0)` as the offset.
 pub fn timestamptz(
   timestamp: timestamp.Timestamp,
   offset: duration.Duration,
