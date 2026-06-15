@@ -751,7 +751,7 @@ pub fn encode_bool_test() {
 pub fn encode_bool_validation_error_test() {
   let assert Error(msg) = value.encode(value.true, int2())
 
-  assert msg == "Attempted to encode boolsend as int2send"
+  assert msg == "Type mismatch: expected boolsend, got int2send"
 }
 
 pub fn encode_int2_test() {
@@ -985,7 +985,7 @@ pub fn encode_date_validation_error_test() {
     value.date(calendar.Date(2025, calendar.January, 10))
     |> value.encode(float4())
 
-  assert msg == "Attempted to encode date_send as float4send"
+  assert msg == "Type mismatch: expected date_send, got float4send"
 }
 
 pub fn encode_time_test() {
@@ -1004,7 +1004,7 @@ pub fn encode_time_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.time(calendar.TimeOfDay(20, 10, 30, 0)), float4())
 
-  assert msg == "Attempted to encode time_send as float4send"
+  assert msg == "Type mismatch: expected time_send, got float4send"
 }
 
 pub fn encode_timestamp_test() {
@@ -1022,7 +1022,7 @@ pub fn encode_timestamp_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.timestamp(timestamp.system_time()), float4())
 
-  assert msg == "Attempted to encode timestamp_send as float4send"
+  assert msg == "Type mismatch: expected timestamp_send, got float4send"
 }
 
 fn to_microseconds(
@@ -1057,7 +1057,7 @@ pub fn encode_interval_validation_error_test() {
 
   let assert Error(msg) = value.encode(val, float4())
 
-  assert msg == "Attempted to encode interval_send as float4send"
+  assert msg == "Type mismatch: expected interval_send, got float4send"
 }
 
 pub fn encode_enum_test() {
@@ -1076,7 +1076,7 @@ pub fn encode_enum_test() {
 pub fn encode_enum_validation_error_test() {
   let assert Error(msg) = value.encode(value.enum("active"), float4())
 
-  assert msg == "Attempted to encode enum_send as float4send"
+  assert msg == "Type mismatch: expected enum_send, got float4send"
 }
 
 pub fn encode_json_test() {
@@ -1192,7 +1192,7 @@ pub fn encode_timestamptz_validation_error_test() {
     value.timestamptz(timestamp.system_time(), duration.hours(8))
     |> value.encode(float4())
 
-  assert msg == "Attempted to encode timestamptz_send as float4send"
+  assert msg == "Type mismatch: expected timestamptz_send, got float4send"
 }
 
 pub fn empty_array_test() {
@@ -1300,7 +1300,7 @@ pub fn encode_array_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.array([10, 12], of: value.int), float4())
 
-  assert msg == "Attempted to encode array_send as float4send"
+  assert msg == "Type mismatch: expected array_send, got float4send"
 }
 
 pub fn encode_bytea_test() {

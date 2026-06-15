@@ -435,7 +435,7 @@ fn validate_typesend(
 ) -> Result(t, String) {
   use <- bool.lazy_guard(when: expected == info.typesend, return: next)
 
-  Error("Attempted to encode " <> expected <> " as " <> info.typesend)
+  Error("Type mismatch: expected " <> expected <> ", got " <> info.typesend)
 }
 
 fn encode_uuid(
@@ -457,16 +457,14 @@ fn encode_hstore(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("hstore_send", info)
 
-  use encoded <- result.map(do_encode_hstore(hstore))
+  let encoded = do_encode_hstore(hstore)
 
   let size = bit_array.byte_size(encoded)
 
-  <<size:big-int-size(32), encoded:bits>>
+  Ok(<<size:big-int-size(32), encoded:bits>>)
 }
 
-fn do_encode_hstore(
-  hstore: Dict(String, Option(String)),
-) -> Result(BitArray, String) {
+fn do_encode_hstore(hstore: Dict(String, Option(String))) -> BitArray {
   let encoded =
     hstore
     |> dict.to_list
@@ -494,7 +492,7 @@ fn do_encode_hstore(
 
   let size = dict.size(hstore)
 
-  Ok(<<size:big-int-size(32), encoded:bits>>)
+  <<size:big-int-size(32), encoded:bits>>
 }
 
 fn encode_array(
@@ -970,38 +968,32 @@ fn decode_array(
       _elem_oid:big-signed-int-size(32),
       rest:bits,
     >> -> {
-      use data <- result.try(do_decode_array(dimensions, rest, []))
+      // The per-dimension {length, lower bound} headers are consumed but not
+      // needed: elements are decoded flat in row-major order.
+      use rest <- result.try(skip_array_dimensions(dimensions, rest))
 
-      decode_array_elems(data.0, decoder, [])
+      decode_array_elems(rest, decoder, [])
       |> result.map(dynamic.array)
     }
     _ -> Error("invalid array")
   }
 }
 
-fn do_decode_array(
+fn skip_array_dimensions(
   count: Int,
   bits: BitArray,
-  acc: List(#(Int, Int)),
-) -> Result(#(BitArray, List(#(Int, Int))), String) {
+) -> Result(BitArray, String) {
   case count {
-    0 -> Ok(#(bits, acc))
-    idx -> {
+    0 -> Ok(bits)
+    _ ->
       case bits {
         <<
-          nbr:big-signed-int-size(32),
-          l_bound:big-signed-int-size(32),
-          rest1:bits,
-        >> -> {
-          let current = #(nbr, l_bound)
-
-          let data_info1 = list.prepend(acc, current)
-
-          do_decode_array({ idx - 1 }, rest1, data_info1)
-        }
+          _nbr:big-signed-int-size(32),
+          _l_bound:big-signed-int-size(32),
+          rest:bits,
+        >> -> skip_array_dimensions(count - 1, rest)
         _ -> Error("invalid array")
       }
-    }
   }
 }
 
