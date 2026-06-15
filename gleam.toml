@@ -3,6 +3,7 @@ version = "3.0.1"
 description = "Gleam library providing Postgres data types, encoders, and decoders"
 licences = ["MIT"]
 repository = { type = "github", user = "stndrs", repo = "pg_value" }
+gleam = ">= 1.11.0"
 
 [dependencies]
 gleam_stdlib = ">= 0.44.0 and < 2.0.0"
