@@ -233,17 +233,20 @@ fn text_to_string(text: String) -> String {
 
 // https://www.postgresql.org/docs/current/arrays.html#ARRAYS-INPUT
 fn array_to_string(array: List(Value)) -> String {
-  let elems = case array {
-    [] -> ""
-    [val] -> to_string(val)
+  case array {
+    // PostgreSQL rejects a bare `ARRAY[]` without a type cast, so emit the
+    // typeless empty-array literal instead.
+    [] -> "'{}'"
+    [val] -> "ARRAY[" <> to_string(val) <> "]"
     vals -> {
-      vals
-      |> list.map(to_string)
-      |> string.join(", ")
+      let elems =
+        vals
+        |> list.map(to_string)
+        |> string.join(", ")
+
+      "ARRAY[" <> elems <> "]"
     }
   }
-
-  "ARRAY[" <> elems <> "]"
 }
 
 // https://www.postgresql.org/docs/current/datatype-boolean.html#DATATYPE-BOOLEAN

@@ -230,6 +230,13 @@ pub fn json_to_string_test() {
   assert "'{\"name\":\"O''Brien\"}'" == val |> value.to_string
 }
 
+pub fn array_to_string_test() {
+  assert "ARRAY[1, 2, 3]"
+    == value.array([1, 2, 3], of: value.int) |> value.to_string
+  assert "ARRAY[42]" == value.array([42], of: value.int) |> value.to_string
+  assert "'{}'" == value.array([], of: value.int) |> value.to_string
+}
+
 pub fn nullable_test() {
   assert value.Int(10) == value.nullable(value.int, Some(10))
   assert value.Null == value.nullable(value.int, None)
