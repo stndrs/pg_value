@@ -347,6 +347,12 @@ pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
 }
 
 /// Returns a decoder for `Timestamp` values.
+///
+/// This decoder expects the finite, integer-microsecond representation produced
+/// by `decode` for `timestamp`/`timestamptz`. PostgreSQL's `infinity` and
+/// `-infinity` decode to the strings `"infinity"`/`"-infinity"` instead, which
+/// this decoder does not handle; decode those cases separately (for example
+/// with `decode.string`).
 pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   use microseconds <- decode.map(decode.int)
   let seconds = microseconds / 1_000_000
