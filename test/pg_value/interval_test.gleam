@@ -57,6 +57,21 @@ pub fn interval_to_iso8601_string_test() {
     |> interval.to_iso8601_string
 }
 
+pub fn negative_interval_to_iso8601_string_test() {
+  let cases = [
+    #(interval.Interval(0, 0, 0, -500_000), "PT-0.5S"),
+    #(interval.Interval(0, 0, 10, -200_000), "PT9.8S"),
+    #(interval.Interval(0, 0, -10, 200_000), "PT-9.8S"),
+    #(interval.Interval(0, 0, -30, 0), "PT-30S"),
+    #(interval.Interval(-1, 0, 0, 0), "P-1M"),
+    #(interval.Interval(0, -2, 0, 0), "P-2D"),
+  ]
+
+  use #(input, expected) <- list.each(cases)
+
+  assert expected == interval.to_iso8601_string(input)
+}
+
 pub fn decoder_test() {
   let cases = [
     interval.Interval(months: 10, days: 7, seconds: 2, microseconds: 500_000),
