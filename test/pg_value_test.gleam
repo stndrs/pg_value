@@ -1185,13 +1185,13 @@ pub fn nested_array_test() {
 
   let expected = <<
     // total size of encoded array
-    68:big-int-size(32),
+    44:big-int-size(32),
     // number of dimensions
     2:big-int-size(32),
     // flags (has_nulls)
     0:big-int-size(32),
-    // element OID
-    143:big-int-size(32),
+    // scalar element OID (int4)
+    23:big-int-size(32),
     // size of first dimension
     1:big-int-size(32),
     // lower bound
@@ -1200,19 +1200,7 @@ pub fn nested_array_test() {
     2:big-int-size(32),
     // lower bound
     1:big-int-size(32),
-    // elems (nested array)
-    36:big-int-size(32),
-    // number of dimensions
-    1:big-int-size(32),
-    // flags (has_nulls)
-    0:big-int-size(32),
-    // element OID
-    23:big-int-size(32),
-    // size of second dimension
-    2:big-int-size(32),
-    // lower bound
-    1:big-int-size(32),
-    // elems (int4)
+    // flat elements (int4) in row-major order
     // size of element
     4:big-int-size(32),
     // element
@@ -1226,6 +1214,18 @@ pub fn nested_array_test() {
   let assert Ok(out) = value.encode(in, array(array(int4())))
 
   assert expected == out
+}
+
+pub fn ragged_array_test() {
+  let in =
+    value.Array([
+      value.array([1, 2], of: value.int),
+      value.array([3], of: value.int),
+    ])
+
+  let assert Error(msg) = value.encode(in, array(array(int4())))
+
+  assert "Array is not rectangular" == msg
 }
 
 pub fn encode_array_validation_error_test() {

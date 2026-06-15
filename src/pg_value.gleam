@@ -455,35 +455,97 @@ fn encode_array(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("array_send", info)
 
-  let dimensions = arr_dims(elems)
-
   case info.elem_type {
     Some(elem_ti) -> {
-      elems
-      |> list.try_map(encode(_, elem_ti))
-      |> result.try(fn(encoded_elems) {
-        let has_nulls = list.contains(encoded_elems, <<-1:big-int-size(32)>>)
+      // PostgreSQL's wire format flattens multidimensional arrays: a single
+      // header (ndim, flags, scalar element oid), one {len, lower bound} pair
+      // per dimension, and the leaf elements laid out flat in row-major order.
+      let scalar_ti = scalar_elem_type(elem_ti)
 
-        do_encode_array(dimensions, has_nulls, elem_ti, encoded_elems)
-      })
+      use dimensions <- result.try(array_dimensions(elems))
+      use leaves <- result.try(array_leaves(elems))
+
+      use encoded_elems <- result.try(
+        list.try_map(leaves, encode(_, scalar_ti)),
+      )
+
+      let has_nulls = list.contains(encoded_elems, <<-1:big-int-size(32)>>)
+
+      do_encode_array(dimensions, has_nulls, scalar_ti, encoded_elems)
     }
     None -> Error("Missing elem type info")
   }
 }
 
-fn arr_dims(elems: List(Value)) -> List(Int) {
+// Resolves the scalar (non-array) element TypeInfo by descending through any
+// nested array element types. Multidimensional arrays share a single scalar
+// element type on the wire.
+fn scalar_elem_type(info: type_info.TypeInfo) -> type_info.TypeInfo {
+  case info.typesend, info.elem_type {
+    "array_send", Some(inner) -> scalar_elem_type(inner)
+    _, _ -> info
+  }
+}
+
+// Determines the dimensions of a (possibly nested) array, validating that it
+// is rectangular: every sibling sub-array at a given depth must have the same
+// length, and elements at a given depth must all be arrays or all be scalars.
+fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
   case elems {
-    [] -> []
-    [Array(inner), ..] -> {
-      let inner_dims = arr_dims(inner)
+    [] -> Ok([])
+    [Array(inner), ..rest] -> {
       let dim = list.length(elems)
-      [dim, ..inner_dims]
+
+      use <- bool.guard(
+        when: !list.all(rest, is_array),
+        return: Error("Array is not rectangular"),
+      )
+
+      use inner_dims <- result.try(array_dimensions(inner))
+
+      // Ensure every sibling sub-array shares the same inner dimensions.
+      use <- bool.guard(
+        when: !list.all(rest, fn(sibling) {
+          case sibling {
+            Array(other) -> array_dimensions(other) == Ok(inner_dims)
+            _ -> False
+          }
+        }),
+        return: Error("Array is not rectangular"),
+      )
+
+      Ok([dim, ..inner_dims])
     }
-    elems -> {
-      let dim = list.length(elems)
-      [dim]
+    _ -> {
+      use <- bool.guard(
+        when: list.any(elems, is_array),
+        return: Error("Array is not rectangular"),
+      )
+
+      Ok([list.length(elems)])
     }
   }
+}
+
+fn is_array(value: Value) -> Bool {
+  case value {
+    Array(_) -> True
+    _ -> False
+  }
+}
+
+// Flattens a (possibly nested) array into its leaf scalar values in row-major
+// order.
+fn array_leaves(elems: List(Value)) -> Result(List(Value), String) {
+  list.try_fold(elems, [], fn(acc, elem) {
+    case elem {
+      Array(inner) -> {
+        use inner_leaves <- result.map(array_leaves(inner))
+        list.append(acc, inner_leaves)
+      }
+      _ -> Ok(list.append(acc, [elem]))
+    }
+  })
 }
 
 fn do_encode_array(
@@ -534,7 +596,10 @@ fn encode_null() -> Result(BitArray, String) {
   Ok(<<-1:big-int-size(32)>>)
 }
 
-fn encode_bool(bool: Bool, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_bool(
+  bool: Bool,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, String) {
   use <- validate_typesend("boolsend", info)
 
   case bool {

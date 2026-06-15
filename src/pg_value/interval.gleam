@@ -96,7 +96,11 @@ pub fn to_iso8601_string(interval: Interval) -> String {
   }
 }
 
-fn append_to_iso8601_string(iso8601: String, count: Int, unit: String) -> String {
+fn append_to_iso8601_string(
+  iso8601: String,
+  count: Int,
+  unit: String,
+) -> String {
   use <- bool.guard(count == 0, return: iso8601)
 
   iso8601 <> int.to_string(count) <> unit
