@@ -159,6 +159,13 @@ pub fn nullable(inner_type: fn(a) -> Value, optional: Option(a)) -> Value {
 }
 
 /// Converts a `Value` to a string formatted properly for PostgreSQL
+///
+/// Intended for building SQL literals for debugging and logging. String
+/// escaping is only safe when the server has `standard_conforming_strings = on`
+/// (the default since PostgreSQL 9.1); with it off, backslash handling can
+/// un-terminate the literal and enable injection. For untrusted data, prefer
+/// parameterized queries with the binary `encode` path rather than
+/// interpolating `to_string` output.
 pub fn to_string(value: Value) -> String {
   case value {
     Null -> "NULL"
