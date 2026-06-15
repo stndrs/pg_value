@@ -123,18 +123,20 @@ pub fn time_to_string_test() {
     == value.time(calendar.TimeOfDay(14, 30, 45, 0)) |> value.to_string
   assert "'00:00:00'"
     == value.time(calendar.TimeOfDay(0, 0, 0, 0)) |> value.to_string
-  assert "'23:59:59.123'"
+  assert "'23:59:59.123456'"
     == value.time(calendar.TimeOfDay(23, 59, 59, 123_456_000))
     |> value.to_string
   assert "'09:05:03'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 0)) |> value.to_string
-  assert "'09:05:03.400'"
+  assert "'09:05:03.4'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 400_000_000))
     |> value.to_string
   assert "'09:05:03.012'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 12_000_000)) |> value.to_string
   assert "'09:05:03.007'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 7_000_000)) |> value.to_string
+  assert "'09:05:03.000123'"
+    == value.time(calendar.TimeOfDay(9, 5, 3, 123_000)) |> value.to_string
 }
 
 pub fn date_to_string_test() {

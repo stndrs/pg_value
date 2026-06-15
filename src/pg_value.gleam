@@ -297,18 +297,27 @@ fn time_to_string(time_of_day: calendar.TimeOfDay) -> String {
   let hours = pad_zero(time_of_day.hours)
   let minutes = pad_zero(time_of_day.minutes)
   let seconds = pad_zero(time_of_day.seconds)
-  let milliseconds = time_of_day.nanoseconds / 1_000_000
+  let microseconds = time_of_day.nanoseconds / 1000
 
-  let msecs = case milliseconds < 100 {
-    True if milliseconds == 0 -> ""
-    True if milliseconds < 10 -> ".00" <> int.to_string(milliseconds)
-    True -> ".0" <> int.to_string(milliseconds)
-    False -> "." <> int.to_string(milliseconds)
+  let fractional = case microseconds {
+    0 -> ""
+    _ -> {
+      // Pad to 6 digits then trim trailing zeros for microsecond precision.
+      let digits = pad(microseconds, 6)
+      "." <> trim_trailing_zeros(digits)
+    }
   }
 
-  let time = hours <> ":" <> minutes <> ":" <> seconds <> msecs
+  let time = hours <> ":" <> minutes <> ":" <> seconds <> fractional
 
   single_quote(time)
+}
+
+fn trim_trailing_zeros(str: String) -> String {
+  case string.ends_with(str, "0") {
+    True -> trim_trailing_zeros(string.drop_end(str, 1))
+    False -> str
+  }
 }
 
 fn timestamp_to_string(timestamp: timestamp.Timestamp) -> String {
@@ -337,6 +346,17 @@ fn pad_zero(n: Int) -> String {
   case n < 10 {
     True -> "0" <> int.to_string(n)
     False -> int.to_string(n)
+  }
+}
+
+// Left-pads a non-negative integer with zeros to at least `width` digits.
+fn pad(n: Int, width: Int) -> String {
+  let str = int.to_string(n)
+  let len = string.length(str)
+
+  case len < width {
+    True -> string.repeat("0", width - len) <> str
+    False -> str
   }
 }
 
