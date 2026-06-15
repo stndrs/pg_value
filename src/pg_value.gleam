@@ -760,15 +760,44 @@ fn encode_date(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("date_send", info)
 
-  let gregorian_days =
-    date_to_gregorian_days(
-      date.year,
-      calendar.month_to_int(date.month),
-      date.day,
-    )
+  let month = calendar.month_to_int(date.month)
+
+  // calendar:date_to_gregorian_days/3 raises for invalid dates (Feb 30, day 0,
+  // year < 1, etc.), so validate up front to honour the Result contract.
+  use <- bool.guard(
+    when: !is_valid_date(date.year, month, date.day),
+    return: Error("Invalid date"),
+  )
+
+  let gregorian_days = date_to_gregorian_days(date.year, month, date.day)
   let pg_days = gregorian_days - postgres_gd_epoch
 
   Ok(<<4:big-int-size(32), pg_days:big-int-size(32)>>)
+}
+
+fn is_valid_date(year: Int, month: Int, day: Int) -> Bool {
+  year >= 1
+  && month >= 1
+  && month <= 12
+  && day >= 1
+  && day <= days_in_month(year, month)
+}
+
+fn days_in_month(year: Int, month: Int) -> Int {
+  case month {
+    1 | 3 | 5 | 7 | 8 | 10 | 12 -> 31
+    4 | 6 | 9 | 11 -> 30
+    2 ->
+      case is_leap_year(year) {
+        True -> 29
+        False -> 28
+      }
+    _ -> 0
+  }
+}
+
+fn is_leap_year(year: Int) -> Bool {
+  { year % 4 == 0 && year % 100 != 0 } || year % 400 == 0
 }
 
 fn encode_time(

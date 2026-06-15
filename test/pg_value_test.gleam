@@ -931,6 +931,18 @@ pub fn encode_date_test() {
   assert expected == out
 }
 
+pub fn encode_date_invalid_test() {
+  use invalid <- list.map([
+    calendar.Date(2025, calendar.February, 30),
+    calendar.Date(2025, calendar.January, 0),
+    calendar.Date(2023, calendar.February, 29),
+  ])
+
+  let assert Error(msg) = value.encode(value.date(invalid), date())
+
+  assert "Invalid date" == msg
+}
+
 pub fn encode_date_validation_error_test() {
   let assert Error(msg) =
     value.date(calendar.Date(2025, calendar.January, 10))
