@@ -621,6 +621,18 @@ pub fn decode_time_test() {
   assert expected_time == time
 }
 
+pub fn decode_time_max_test() {
+  // PostgreSQL allows time '24:00:00' (86_400_000_000 microseconds), which must
+  // not crash the decoder.
+  let in = <<86_400_000_000:big-int-size(64)>>
+
+  let assert Ok(result) = value.decode(in, time())
+
+  let assert Ok(time) = decode.run(result, value.time_decoder())
+
+  assert calendar.TimeOfDay(24, 0, 0, 0) == time
+}
+
 pub fn decode_time_error_test() {
   let in = <<1:big-int-size(32)>>
   let out = "invalid time"

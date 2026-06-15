@@ -1215,7 +1215,11 @@ fn from_microseconds(usecs: Int) -> calendar.TimeOfDay {
   let seconds = usecs / usecs_per_sec
   let nanoseconds = { usecs % usecs_per_sec } * 1000
 
-  let #(hours, minutes, seconds) = seconds_to_time(seconds)
+  // Compute h/m/s with integer math rather than calendar:seconds_to_time/1,
+  // which guards Secs < 86400 and would crash on PostgreSQL's valid 24:00:00.
+  let hours = seconds / 3600
+  let minutes = { seconds % 3600 } / 60
+  let seconds = seconds % 60
 
   calendar.TimeOfDay(hours:, minutes:, seconds:, nanoseconds:)
 }
@@ -1271,9 +1275,6 @@ const nsecs_per_usec = 1000
 
 @external(erlang, "calendar", "gregorian_days_to_date")
 fn gregorian_days_to_date(days: Int) -> #(Int, Int, Int)
-
-@external(erlang, "calendar", "seconds_to_time")
-fn seconds_to_time(seconds: Int) -> #(Int, Int, Int)
 
 @external(erlang, "calendar", "date_to_gregorian_days")
 fn date_to_gregorian_days(year: Int, month: Int, day: Int) -> Int
