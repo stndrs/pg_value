@@ -166,7 +166,7 @@ pub fn to_string(value: Value) -> String {
     Timestamptz(ts, offset) -> timestamptz_to_string(ts, offset)
     Interval(val) -> interval.to_iso8601_string(val) |> single_quote
     Array(vals) -> array_to_string(vals)
-    Uuid(val) -> uuid_to_string(val)
+    Uuid(val) -> uuid_to_string(val) |> single_quote
     Hstore(val) -> hstore_to_string(val)
     Enum(val) -> string.replace(in: val, each: "'", with: "''") |> single_quote
     Json(val) ->
@@ -202,7 +202,12 @@ fn escape(str: String) -> String {
 }
 
 fn uuid_to_string(uuid: BitArray) -> String {
-  do_uuid_to_string(uuid, 0, "", "-")
+  // A UUID is exactly 128 bits. Reject other sizes rather than silently
+  // truncating to a shorter, invalid literal.
+  case uuid {
+    <<_:big-int-size(128)>> -> do_uuid_to_string(uuid, 0, "", "-")
+    _ -> ""
+  }
 }
 
 fn do_uuid_to_string(

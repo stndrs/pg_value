@@ -62,7 +62,7 @@ pub fn uuid_v4_to_string_test() {
 
   let uuid = value.uuid(<<v4_uuid:big-int-size(128)>>)
 
-  assert "85eab1c3-7acc-4d82-88e4-5fc1a9daa9d8" == value.to_string(uuid)
+  assert "'85eab1c3-7acc-4d82-88e4-5fc1a9daa9d8'" == value.to_string(uuid)
 }
 
 pub fn uuid_v7_to_string_test() {
@@ -70,7 +70,7 @@ pub fn uuid_v7_to_string_test() {
 
   let uuid = value.uuid(<<v7_uuid:big-int-size(128)>>)
 
-  assert "019c39ce-0a5a-7dca-bfaf-8d79ed0db096" == value.to_string(uuid)
+  assert "'019c39ce-0a5a-7dca-bfaf-8d79ed0db096'" == value.to_string(uuid)
 }
 
 pub fn hstore_to_string_test() {
