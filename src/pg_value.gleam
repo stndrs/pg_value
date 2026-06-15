@@ -1148,6 +1148,8 @@ fn do_decode_hstore(
 ) -> Result(Dict(String, Option(String)), Nil) {
   case size, bits {
     0, <<>> -> Ok(acc)
+    // Declared count exhausted but trailing bytes remain: malformed input.
+    0, _ -> Error(Nil)
     size, bits1 -> {
       use #(key, rest) <- result.try(decode_hstore_key(bits1))
       use #(val, rest1) <- result.try(decode_hstore_value(rest))

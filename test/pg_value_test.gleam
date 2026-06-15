@@ -543,6 +543,15 @@ pub fn decode_hstore_test() {
   assert data == decoded
 }
 
+pub fn decode_hstore_malformed_test() {
+  // Declared count 0 but trailing bytes present.
+  let in = <<0:big-int-size(32), 1, 2, 3>>
+
+  let assert Error(msg) = value.decode(in, hstore())
+
+  assert "invalid hstore" == msg
+}
+
 pub fn decode_enum_test() {
   use label <- list.each(["active", "pending", "archived"])
 
