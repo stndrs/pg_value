@@ -683,7 +683,7 @@ fn encode_int(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int2(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int2send", info)
 
-  case -int2_min <= num && num <= int2_max {
+  case int2_min <= num && num <= int2_max {
     True -> Ok(<<2:big-int-size(32), num:big-int-size(16)>>)
     False -> Error("Out of range for int2")
   }
@@ -692,7 +692,7 @@ fn encode_int2(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int4(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int4send", info)
 
-  case -int4_min <= num && num <= int4_max {
+  case int4_min <= num && num <= int4_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
     False -> Error("Out of range for int4")
   }
@@ -701,7 +701,7 @@ fn encode_int4(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int8(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int8send", info)
 
-  case -int8_min <= num && num <= int8_max {
+  case int8_min <= num && num <= int8_max {
     True -> Ok(<<8:big-int-size(32), num:big-int-size(64)>>)
     False -> Error("Out of range for int8")
   }
@@ -1225,7 +1225,7 @@ fn decode_time(bits: BitArray) -> Result(Dynamic, String) {
 
 fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
   let pos_infinity = int8_max
-  let neg_infinity = -int8_min
+  let neg_infinity = int8_min
 
   case bits {
     <<num:signed-big-int-size(64)>> -> {
@@ -1326,17 +1326,17 @@ fn unix_seconds_before_postgres_epoch() -> duration.Duration {
 
 const oid_max = 0xFFFFFFFF
 
-const int2_min = 0x8000
+const int2_min = -32_768
 
 const int2_max = 0x7FFF
 
-const int4_min = 0x80000000
+const int4_min = -2_147_483_648
 
 const int4_max = 0x7FFFFFFF
 
 const int8_max = 0x7FFFFFFFFFFFFFFF
 
-const int8_min = 0x8000000000000000
+const int8_min = -9_223_372_036_854_775_808
 
 // Seconds between Jan 1, 0001 and Jan 1, 2000
 const postgres_gs_epoch = 63_113_904_000
