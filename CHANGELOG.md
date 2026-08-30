@@ -1,5 +1,20 @@
 # Changelog
 
+## 4.0.0
+
+### Added
+
+- `EncodeError` and `DecodeError` types: `encode` and `decode` now return
+  structured errors instead of `String`. Includes `encode_error_to_string`
+  and `decode_error_to_string` for human-readable messages
+
+### Changed
+
+- **Breaking:** `encode` returns `Result(BitArray, EncodeError)` instead of
+  `Result(_, String)`
+- **Breaking:** `decode` returns `Result(Dynamic, DecodeError)` instead of
+  `Result(_, String)`
+
 ## 3.1.0
 
 ### Added

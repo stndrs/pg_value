@@ -335,11 +335,7 @@ pub fn decode_int2_test() {
 
 pub fn decode_int2_error_test() {
   let in = <<1:big-int-size(8)>>
-  let out = "invalid int2"
-
-  let assert Error(msg) = value.decode(in, int2())
-
-  assert out == msg
+  let assert Error(value.InvalidInt2) = value.decode(in, int2())
 }
 
 pub fn decode_int4_test() {
@@ -355,11 +351,7 @@ pub fn decode_int4_test() {
 
 pub fn decode_int4_error_test() {
   let in = <<1:big-int-size(16)>>
-  let out = "invalid int4"
-
-  let assert Error(msg) = value.decode(in, int4())
-
-  assert out == msg
+  let assert Error(value.InvalidInt4) = value.decode(in, int4())
 }
 
 pub fn decode_int8_test() {
@@ -379,11 +371,7 @@ pub fn decode_int8_test() {
 
 pub fn decode_int8_error_test() {
   let in = <<1:big-int-size(32)>>
-  let out = "invalid int8"
-
-  let assert Error(msg) = value.decode(in, int8())
-
-  assert out == msg
+  let assert Error(value.InvalidInt8) = value.decode(in, int8())
 }
 
 pub fn decode_float4_test() {
@@ -400,11 +388,7 @@ pub fn decode_float4_test() {
 
 pub fn decode_float4_error_test() {
   let in = <<1:big-int-size(16)>>
-  let out = "invalid float4"
-
-  let assert Error(msg) = value.decode(in, float4())
-
-  assert out == msg
+  let assert Error(value.InvalidFloat4) = value.decode(in, float4())
 }
 
 pub fn decode_float8_test() {
@@ -420,11 +404,7 @@ pub fn decode_float8_test() {
 
 pub fn decode_float8_error_test() {
   let in = <<1:big-int-size(32)>>
-  let out = "invalid float8"
-
-  let assert Error(msg) = value.decode(in, float8())
-
-  assert out == msg
+  let assert Error(value.InvalidFloat8) = value.decode(in, float8())
 }
 
 pub fn decode_varchar_test() {
@@ -440,11 +420,7 @@ pub fn decode_varchar_test() {
 
 pub fn decode_varchar_error_test() {
   let in = <<255, 255, 255, 255>>
-  let out = "invalid varchar"
-
-  let assert Error(msg) = value.decode(in, varchar())
-
-  assert out == msg
+  let assert Error(value.InvalidVarchar) = value.decode(in, varchar())
 }
 
 pub fn decode_text_test() {
@@ -460,11 +436,7 @@ pub fn decode_text_test() {
 
 pub fn decode_text_error_test() {
   let in = <<255, 255, 255, 255>>
-  let out = "invalid text"
-
-  let assert Error(msg) = value.decode(in, text())
-
-  assert out == msg
+  let assert Error(value.InvalidText) = value.decode(in, text())
 }
 
 pub fn decode_bytea_test() {
@@ -555,9 +527,7 @@ pub fn decode_hstore_malformed_test() {
   // Declared count 0 but trailing bytes present.
   let in = <<0:big-int-size(32), 1, 2, 3>>
 
-  let assert Error(msg) = value.decode(in, hstore())
-
-  assert "invalid hstore" == msg
+  let assert Error(value.InvalidHstore) = value.decode(in, hstore())
 }
 
 pub fn decode_enum_test() {
@@ -572,8 +542,7 @@ pub fn decode_enum_test() {
 
 pub fn decode_enum_error_test() {
   let in = <<0xFF>>
-  let assert Error(msg) = value.decode(in, enum_type())
-  assert "invalid enum" == msg
+  let assert Error(value.InvalidEnum) = value.decode(in, enum_type())
 }
 
 pub fn decode_json_test() {
@@ -587,8 +556,7 @@ pub fn decode_json_test() {
 
 pub fn decode_json_error_test() {
   let in = <<0xFF>>
-  let assert Error(msg) = value.decode(in, json_type())
-  assert "invalid json" == msg
+  let assert Error(value.InvalidJson) = value.decode(in, json_type())
 }
 
 pub fn decode_jsonb_test() {
@@ -603,14 +571,12 @@ pub fn decode_jsonb_test() {
 pub fn decode_jsonb_error_test() {
   // Wrong version byte
   let in = <<2:int-size(8), "{}":utf8>>
-  let assert Error(msg) = value.decode(in, jsonb_type())
-  assert "invalid jsonb" == msg
+  let assert Error(value.InvalidJsonb) = value.decode(in, jsonb_type())
 }
 
 pub fn decode_jsonb_empty_error_test() {
   let in = <<>>
-  let assert Error(msg) = value.decode(in, jsonb_type())
-  assert "invalid jsonb" == msg
+  let assert Error(value.InvalidJsonb) = value.decode(in, jsonb_type())
 }
 
 pub fn decode_time_test() {
@@ -670,11 +636,7 @@ pub fn decode_time_max_test() {
 
 pub fn decode_time_error_test() {
   let in = <<1:big-int-size(32)>>
-  let out = "invalid time"
-
-  let assert Error(msg) = value.decode(in, time())
-
-  assert out == msg
+  let assert Error(value.InvalidTime) = value.decode(in, time())
 }
 
 pub fn decode_date_test() {
@@ -698,20 +660,12 @@ pub fn decode_date_test() {
 
 pub fn decode_date_error_test() {
   let in = <<1:big-int-size(16)>>
-  let out = "invalid date"
-
-  let assert Error(msg) = value.decode(in, date())
-
-  assert out == msg
+  let assert Error(value.InvalidDate) = value.decode(in, date())
 }
 
 pub fn array_error_test() {
   let in = <<1:big-int-size(16)>>
-  let out = "invalid array"
-
-  let assert Error(msg) = value.decode(in, array(int2()))
-
-  assert out == msg
+  let assert Error(value.InvalidArray) = value.decode(in, array(int2()))
 }
 
 pub fn decode_array_test() {
@@ -749,7 +703,7 @@ pub fn encode_bool_test() {
 pub fn encode_bool_validation_error_test() {
   let assert Error(msg) = value.encode(value.true, int2())
 
-  assert msg == "Type mismatch: expected boolsend, got int2send"
+  assert msg == value.TypeMismatch("boolsend", "int2send")
 }
 
 pub fn encode_int2_test() {
@@ -767,17 +721,15 @@ pub fn encode_int2_error_test() {
   use invalid <- list.map([-100_000, 100_000, 32_768, -32_769])
 
   let in = value.int(invalid)
-  let expected = "Out of range for int2"
 
-  let assert Error(msg) = value.encode(in, int2())
-
-  assert expected == msg
+  let assert Error(value.Int2OutOfRange(num)) = value.encode(in, int2())
+  assert num == invalid
 }
 
 pub fn encode_int_validation_error_test() {
   let assert Error(msg) = value.encode(value.int(33), float4())
 
-  assert msg == "Attempted to encode 33 as float4send"
+  assert msg == value.IncompatibleValue(value.Int(33), "float4send")
 }
 
 pub fn encode_int4_test() {
@@ -795,11 +747,9 @@ pub fn encode_int4_error_test() {
   use invalid <- list.map([2_147_483_648, -2_147_483_649])
 
   let in = value.int(invalid)
-  let expected = "Out of range for int4"
 
-  let assert Error(msg) = value.encode(in, int4())
-
-  assert expected == msg
+  let assert Error(value.Int4OutOfRange(num)) = value.encode(in, int4())
+  assert num == invalid
 }
 
 pub fn encode_int8_test() {
@@ -824,11 +774,9 @@ pub fn encode_int8_error_test() {
   ])
 
   let in = value.int(invalid)
-  let expected = "Out of range for int8"
 
-  let assert Error(msg) = value.encode(in, int8())
-
-  assert expected == msg
+  let assert Error(value.Int8OutOfRange(num)) = value.encode(in, int8())
+  assert num == invalid
 }
 
 pub fn encode_float4_test() {
@@ -856,7 +804,7 @@ pub fn encode_float8_test() {
 pub fn encode_float_validation_error_test() {
   let assert Error(msg) = value.encode(value.float(33.5), varchar())
 
-  assert msg == "Unsupported float type"
+  assert msg == value.IncompatibleValue(value.Float(33.5), "varcharsend")
 }
 
 pub fn encode_oid_test() {
@@ -874,11 +822,9 @@ pub fn encode_oid_error_test() {
   use invalid <- list.map([-1, 4_294_967_296])
 
   let in = value.int(invalid)
-  let expected = "Out of range for oid"
 
-  let assert Error(msg) = value.encode(in, oid())
-
-  assert expected == msg
+  let assert Error(value.OidOutOfRange(num)) = value.encode(in, oid())
+  assert num == invalid
 }
 
 pub fn encode_varchar_test() {
@@ -895,7 +841,7 @@ pub fn encode_varchar_test() {
 pub fn encode_text_validation_error_test() {
   let assert Error(msg) = value.encode(value.text("some text"), float4())
 
-  assert msg == "Attempted to encode 'some text' as float4send"
+  assert msg == value.IncompatibleValue(value.Text("some text"), "float4send")
 }
 
 pub fn encode_uuid_test() {
@@ -912,7 +858,7 @@ pub fn encode_uuid_test() {
 pub fn encode_uuid_error_test() {
   let value = value.uuid(<<"invalid":utf8>>)
 
-  let assert Error("Invalid UUID") = value.encode(value, uuid())
+  let assert Error(value.InvalidUuidSize) = value.encode(value, uuid())
 }
 
 pub fn encode_hstore_test() {
@@ -973,9 +919,8 @@ pub fn encode_date_invalid_test() {
     calendar.Date(2023, calendar.February, 29),
   ])
 
-  let assert Error(msg) = value.encode(value.date(invalid), date())
-
-  assert "Invalid date" == msg
+  let assert Error(value.InvalidCalendarDate) =
+    value.encode(value.date(invalid), date())
 }
 
 pub fn encode_date_validation_error_test() {
@@ -983,7 +928,7 @@ pub fn encode_date_validation_error_test() {
     value.date(calendar.Date(2025, calendar.January, 10))
     |> value.encode(float4())
 
-  assert msg == "Type mismatch: expected date_send, got float4send"
+  assert msg == value.TypeMismatch("date_send", "float4send")
 }
 
 pub fn encode_time_test() {
@@ -1002,7 +947,7 @@ pub fn encode_time_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.time(calendar.TimeOfDay(20, 10, 30, 0)), float4())
 
-  assert msg == "Type mismatch: expected time_send, got float4send"
+  assert msg == value.TypeMismatch("time_send", "float4send")
 }
 
 pub fn encode_timestamp_test() {
@@ -1020,7 +965,7 @@ pub fn encode_timestamp_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.timestamp(timestamp.system_time()), float4())
 
-  assert msg == "Type mismatch: expected timestamp_send, got float4send"
+  assert msg == value.TypeMismatch("timestamp_send", "float4send")
 }
 
 fn to_microseconds(
@@ -1055,7 +1000,7 @@ pub fn encode_interval_validation_error_test() {
 
   let assert Error(msg) = value.encode(val, float4())
 
-  assert msg == "Type mismatch: expected interval_send, got float4send"
+  assert msg == value.TypeMismatch("interval_send", "float4send")
 }
 
 pub fn encode_enum_test() {
@@ -1074,7 +1019,7 @@ pub fn encode_enum_test() {
 pub fn encode_enum_validation_error_test() {
   let assert Error(msg) = value.encode(value.enum("active"), float4())
 
-  assert msg == "Type mismatch: expected enum_send, got float4send"
+  assert msg == value.TypeMismatch("enum_send", "float4send")
 }
 
 pub fn encode_json_test() {
@@ -1108,7 +1053,7 @@ pub fn encode_json_validation_error_test() {
 
   let assert Error(msg) = value.encode(val, float4())
 
-  assert msg == "Attempted to encode json as float4send"
+  assert msg == value.IncompatibleValue(value.Json(json.null()), "float4send")
 }
 
 pub fn encode_timestamptz_test() {
@@ -1190,7 +1135,7 @@ pub fn encode_timestamptz_validation_error_test() {
     value.timestamptz(timestamp.system_time(), duration.hours(8))
     |> value.encode(float4())
 
-  assert msg == "Type mismatch: expected timestamptz_send, got float4send"
+  assert msg == value.TypeMismatch("timestamptz_send", "float4send")
 }
 
 pub fn empty_array_test() {
@@ -1289,16 +1234,15 @@ pub fn ragged_array_test() {
       value.array([3], of: value.int),
     ])
 
-  let assert Error(msg) = value.encode(in, array(array(int4())))
-
-  assert "Array is not rectangular" == msg
+  let assert Error(value.ArrayNotRectangular) =
+    value.encode(in, array(array(int4())))
 }
 
 pub fn encode_array_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.array([10, 12], of: value.int), float4())
 
-  assert msg == "Type mismatch: expected array_send, got float4send"
+  assert msg == value.TypeMismatch("array_send", "float4send")
 }
 
 pub fn encode_bytea_test() {

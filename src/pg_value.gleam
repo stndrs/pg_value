@@ -52,6 +52,123 @@ pub const true = Bool(True)
 
 pub const false = Bool(False)
 
+pub type EncodeError {
+  /// The `Value` variant does not match the type's binary format. `expected`
+  /// is the send/recv function name (e.g. `"boolsend"`), `got` is the one
+  /// actually encountered.
+  TypeMismatch(expected: String, got: String)
+  /// The `Value` cannot be encoded as this type at all. Carries the value
+  /// and the type's send function name (e.g. `"float4send"`).
+  IncompatibleValue(value: Value, typesend: String)
+  /// `Int` value does not fit in the oid range.
+  OidOutOfRange(value: Int)
+  /// `Int` value does not fit in the int2 range.
+  Int2OutOfRange(value: Int)
+  /// `Int` value does not fit in the int4 range.
+  Int4OutOfRange(value: Int)
+  /// `Int` value does not fit in the int8 range.
+  Int8OutOfRange(value: Int)
+  /// A `Uuid` value is not exactly 128 bits.
+  InvalidUuidSize
+  /// A `calendar.Date` is not a valid calendar date (e.g. Feb 30).
+  InvalidCalendarDate
+  /// Nested arrays have inconsistent dimensions.
+  ArrayNotRectangular
+  /// No element `TypeInfo` is available for an array type.
+  MissingElemTypeInfo
+}
+
+pub type DecodeError {
+  /// `typereceive` names a type with no decoder.
+  UnsupportedType(typereceive: String)
+  /// No element `TypeInfo` is available for an array type.
+  ElemTypeMissing
+  /// Binary array data is malformed.
+  InvalidArray
+  /// Binary data is not a 128-bit UUID.
+  InvalidUuid
+  /// Decoded binary data does not yield a valid date.
+  InvalidDate
+  /// Binary data is not a valid bool.
+  InvalidBool
+  /// Binary data is not a valid int2.
+  InvalidInt2
+  /// Binary data is not a valid int4.
+  InvalidInt4
+  /// Binary data is not a valid int8.
+  InvalidInt8
+  /// Binary data is not a valid oid.
+  InvalidOid
+  /// Binary data is not a valid float4.
+  InvalidFloat4
+  /// Binary data is not a valid float8.
+  InvalidFloat8
+  /// Binary data is not a valid varchar.
+  InvalidVarchar
+  /// Binary data is not valid UTF-8 text.
+  InvalidText
+  /// Binary data is not a valid enum label.
+  InvalidEnum
+  /// Binary data is not a valid json document.
+  InvalidJson
+  /// Binary data is not a valid jsonb document (missing version byte or
+  /// invalid UTF-8).
+  InvalidJsonb
+  /// Binary data is not a valid hstore.
+  InvalidHstore
+  /// Binary data is not a valid time.
+  InvalidTime
+  /// Binary data is not a valid timestamp.
+  InvalidTimestamp
+  /// Binary data is not a valid interval.
+  InvalidInterval
+}
+
+/// Converts an `EncodeError` to a human-readable message.
+pub fn encode_error_to_string(error: EncodeError) -> String {
+  case error {
+    TypeMismatch(expected, got) ->
+      "Type mismatch: expected " <> expected <> ", got " <> got
+    IncompatibleValue(value, typesend) ->
+      "Attempted to encode " <> to_string(value) <> " as " <> typesend
+    OidOutOfRange(value) -> "Out of range for oid: " <> int.to_string(value)
+    Int2OutOfRange(value) -> "Out of range for int2: " <> int.to_string(value)
+    Int4OutOfRange(value) -> "Out of range for int4: " <> int.to_string(value)
+    Int8OutOfRange(value) -> "Out of range for int8: " <> int.to_string(value)
+    InvalidUuidSize -> "invalid uuid"
+    InvalidCalendarDate -> "invalid date"
+    ArrayNotRectangular -> "array is not rectangular"
+    MissingElemTypeInfo -> "missing elem type info"
+  }
+}
+
+/// Converts a `DecodeError` to a human-readable message.
+pub fn decode_error_to_string(error: DecodeError) -> String {
+  case error {
+    UnsupportedType(typereceive) -> "unsupported type: " <> typereceive
+    ElemTypeMissing -> "elem type missing"
+    InvalidArray -> "invalid array"
+    InvalidUuid -> "invalid uuid"
+    InvalidDate -> "invalid date"
+    InvalidBool -> "invalid bool"
+    InvalidInt2 -> "invalid int2"
+    InvalidInt4 -> "invalid int4"
+    InvalidInt8 -> "invalid int8"
+    InvalidOid -> "invalid oid"
+    InvalidFloat4 -> "invalid float4"
+    InvalidFloat8 -> "invalid float8"
+    InvalidVarchar -> "invalid varchar"
+    InvalidText -> "invalid text"
+    InvalidEnum -> "invalid enum"
+    InvalidJson -> "invalid json"
+    InvalidJsonb -> "invalid jsonb"
+    InvalidHstore -> "invalid hstore"
+    InvalidTime -> "invalid time"
+    InvalidTimestamp -> "invalid timestamp"
+    InvalidInterval -> "invalid interval"
+  }
+}
+
 /// Returns a Bool value.
 pub fn bool(bool: Bool) -> Value {
   Bool(bool)
@@ -393,7 +510,7 @@ pub fn date_decoder() -> decode.Decoder(calendar.Date) {
 pub fn encode(
   value: Value,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   case value {
     Null -> encode_null()
     Bool(val) -> encode_bool(val, info)
@@ -417,30 +534,30 @@ pub fn encode(
 fn validate_typesend(
   expected: String,
   info: type_info.TypeInfo,
-  next: fn() -> Result(t, String),
-) -> Result(t, String) {
+  next: fn() -> Result(t, EncodeError),
+) -> Result(t, EncodeError) {
   use <- bool.lazy_guard(when: expected == info.typesend, return: next)
 
-  Error("Type mismatch: expected " <> expected <> ", got " <> info.typesend)
+  Error(TypeMismatch(expected, info.typesend))
 }
 
 fn encode_uuid(
   uuid: BitArray,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("uuid_send", info)
 
   case uuid {
     <<uuid:big-int-size(128)>> ->
       Ok(<<16:big-int-size(32), uuid:big-int-size(128)>>)
-    _ -> Error("Invalid UUID")
+    _ -> Error(InvalidUuidSize)
   }
 }
 
 fn encode_hstore(
   hstore: Dict(String, Option(String)),
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("hstore_send", info)
 
   let encoded = do_encode_hstore(hstore)
@@ -484,7 +601,7 @@ fn do_encode_hstore(hstore: Dict(String, Option(String))) -> BitArray {
 fn encode_array(
   elems: List(Value),
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("array_send", info)
 
   case info.elem_type {
@@ -505,7 +622,7 @@ fn encode_array(
 
       do_encode_array(dimensions, has_nulls, scalar_ti, encoded_elems)
     }
-    None -> Error("Missing elem type info")
+    None -> Error(MissingElemTypeInfo)
   }
 }
 
@@ -522,7 +639,7 @@ fn scalar_elem_type(info: type_info.TypeInfo) -> type_info.TypeInfo {
 // Determines the dimensions of a (possibly nested) array, validating that it
 // is rectangular. Every sibling sub-array at a given depth must have the same
 // length, and elements at a given depth must all be arrays or all be scalars.
-fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
+fn array_dimensions(elems: List(Value)) -> Result(List(Int), EncodeError) {
   case elems {
     [] -> Ok([])
     [Array(inner), ..rest] -> {
@@ -530,7 +647,7 @@ fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
 
       use <- bool.guard(
         when: !list.all(rest, is_array),
-        return: Error("Array is not rectangular"),
+        return: Error(ArrayNotRectangular),
       )
 
       use inner_dims <- result.try(array_dimensions(inner))
@@ -538,7 +655,7 @@ fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
       // Ensure every sibling sub-array shares the same inner dimensions.
       use <- bool.guard(
         when: !list.all(rest, ensure_sub_array_dimensions(_, inner_dims)),
-        return: Error("Array is not rectangular"),
+        return: Error(ArrayNotRectangular),
       )
 
       Ok([dim, ..inner_dims])
@@ -546,7 +663,7 @@ fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
     _ -> {
       use <- bool.guard(
         when: list.any(elems, is_array),
-        return: Error("Array is not rectangular"),
+        return: Error(ArrayNotRectangular),
       )
 
       Ok([list.length(elems)])
@@ -573,7 +690,7 @@ fn is_array(value: Value) -> Bool {
 
 // Flattens a (possibly nested) array into its leaf scalar values in row-major
 // order.
-fn array_leaves(elems: List(Value)) -> Result(List(Value), String) {
+fn array_leaves(elems: List(Value)) -> Result(List(Value), EncodeError) {
   list.try_fold(elems, [], fn(acc, elem) {
     case elem {
       Array(inner) -> {
@@ -596,7 +713,7 @@ fn do_encode_array(
   has_nulls: Bool,
   info: type_info.TypeInfo,
   encoded: List(BitArray),
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   let header = array_header(dimensions, has_nulls, info.oid)
 
   let encoder = fn(bits) {
@@ -635,14 +752,14 @@ fn array_header(
   |> bit_array.concat
 }
 
-fn encode_null() -> Result(BitArray, String) {
+fn encode_null() -> Result(BitArray, EncodeError) {
   Ok(<<-1:big-int-size(32)>>)
 }
 
 fn encode_bool(
   bool: Bool,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("boolsend", info)
 
   case bool {
@@ -651,72 +768,82 @@ fn encode_bool(
   }
 }
 
-fn encode_oid(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_oid(
+  num: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("oidsend", info)
 
   case 0 <= num && num <= oid_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
-    False -> Error("Out of range for oid")
+    False -> Error(OidOutOfRange(num))
   }
 }
 
-fn encode_int(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_int(
+  num: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
   case info.typesend {
     "oidsend" -> encode_oid(num, info)
     "int2send" -> encode_int2(num, info)
     "int4send" -> encode_int4(num, info)
     "int8send" -> encode_int8(num, info)
-    _ -> {
-      let message =
-        "Attempted to encode " <> int.to_string(num) <> " as " <> info.typesend
-
-      Error(message)
-    }
+    _ -> Error(IncompatibleValue(Int(num), info.typesend))
   }
 }
 
-fn encode_int2(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_int2(
+  num: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("int2send", info)
 
   case -int2_min_abs <= num && num <= int2_max {
     True -> Ok(<<2:big-int-size(32), num:big-int-size(16)>>)
-    False -> Error("Out of range for int2")
+    False -> Error(Int2OutOfRange(num))
   }
 }
 
-fn encode_int4(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_int4(
+  num: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("int4send", info)
 
   case -int4_min_abs <= num && num <= int4_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
-    False -> Error("Out of range for int4")
+    False -> Error(Int4OutOfRange(num))
   }
 }
 
-fn encode_int8(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_int8(
+  num: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("int8send", info)
 
   case -int8_min_abs <= num && num <= int8_max {
     True -> Ok(<<8:big-int-size(32), num:big-int-size(64)>>)
-    False -> Error("Out of range for int8")
+    False -> Error(Int8OutOfRange(num))
   }
 }
 
 fn encode_float(
   num: Float,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   case info.typesend {
     "float4send" -> encode_float4(num, info)
     "float8send" -> encode_float8(num, info)
-    _ -> Error("Unsupported float type")
+    _ -> Error(IncompatibleValue(Float(num), info.typesend))
   }
 }
 
 fn encode_float4(
   num: Float,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("float4send", info)
 
   Ok(<<4:big-int-size(32), num:big-float-size(32)>>)
@@ -725,7 +852,7 @@ fn encode_float4(
 fn encode_float8(
   num: Float,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("float8send", info)
 
   Ok(<<8:big-int-size(32), num:big-float-size(64)>>)
@@ -734,7 +861,7 @@ fn encode_float8(
 fn encode_text(
   text: String,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   let encoder = fn(text) {
     let bits = bit_array.from_string(text)
     let len = bit_array.byte_size(bits)
@@ -748,14 +875,14 @@ fn encode_text(
     "charsend" -> encoder(text)
     "bpcharsend" -> encoder(text)
     "namesend" -> encoder(text)
-    _ -> Error("Attempted to encode '" <> text <> "' as " <> info.typesend)
+    _ -> Error(IncompatibleValue(Text(text), info.typesend))
   }
 }
 
 fn encode_enum(
   label: String,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("enum_send", info)
 
   let bits = bit_array.from_string(label)
@@ -767,7 +894,7 @@ fn encode_enum(
 fn encode_json(
   json_val: json.Json,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   let json_string = json.to_string(json_val)
   let json_bits = bit_array.from_string(json_string)
 
@@ -780,14 +907,14 @@ fn encode_json(
       let len = bit_array.byte_size(json_bits) + 1
       Ok(<<len:big-int-size(32), 1:int-size(8), json_bits:bits>>)
     }
-    _ -> Error("Attempted to encode json as " <> info.typesend)
+    _ -> Error(IncompatibleValue(Json(json_val), info.typesend))
   }
 }
 
 fn encode_bytea(
   bits: BitArray,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("byteasend", info)
 
   let len = bit_array.byte_size(bits)
@@ -798,7 +925,7 @@ fn encode_bytea(
 fn encode_date(
   date: calendar.Date,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("date_send", info)
 
   let month = calendar.month_to_int(date.month)
@@ -807,7 +934,7 @@ fn encode_date(
   // year < 1, etc.), so validate up front to honour the Result contract.
   use <- bool.guard(
     when: !is_valid_date(date.year, month, date.day),
-    return: Error("Invalid date"),
+    return: Error(InvalidCalendarDate),
   )
 
   let gregorian_days = date_to_gregorian_days(date.year, month, date.day)
@@ -844,7 +971,7 @@ fn is_leap_year(year: Int) -> Bool {
 fn encode_time(
   time_of_day: calendar.TimeOfDay,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("time_send", info)
 
   let usecs =
@@ -860,7 +987,7 @@ fn encode_time(
 fn encode_interval(
   interval: interval.Interval,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("interval_send", info)
 
   let interval.Interval(months:, days:, seconds:, microseconds:) = interval
@@ -880,7 +1007,7 @@ fn encode_interval(
 fn encode_timestamp(
   timestamp: timestamp.Timestamp,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("timestamp_send", info)
 
   let timestamp_int =
@@ -895,7 +1022,7 @@ fn encode_timestamptz(
   timestamp: timestamp.Timestamp,
   offset: duration.Duration,
   info: type_info.TypeInfo,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, EncodeError) {
   use <- validate_typesend("timestamptz_send", info)
 
   let negated_offset = negate_duration(offset)
@@ -918,13 +1045,13 @@ fn encode_timestamptz(
 pub fn decode(
   bits: BitArray,
   info: type_info.TypeInfo,
-) -> Result(Dynamic, String) {
+) -> Result(Dynamic, DecodeError) {
   case info.typereceive {
     "array_recv" ->
       decode_array(bits, with: fn(elem) {
         case info.elem_type {
           Some(elem_ti) -> decode(elem, elem_ti)
-          None -> Error("elem type missing")
+          None -> Error(ElemTypeMissing)
         }
       })
     "boolrecv" -> decode_bool(bits)
@@ -950,14 +1077,14 @@ pub fn decode(
     "enum_recv" -> decode_enum(bits)
     "json_recv" -> decode_json(bits)
     "jsonb_recv" -> decode_jsonb(bits)
-    _ -> Error("Unsupported type")
+    _ -> Error(UnsupportedType(info.typereceive))
   }
 }
 
 fn decode_array(
   bits: BitArray,
-  with decoder: fn(BitArray) -> Result(Dynamic, String),
-) -> Result(Dynamic, String) {
+  with decoder: fn(BitArray) -> Result(Dynamic, DecodeError),
+) -> Result(Dynamic, DecodeError) {
   case bits {
     <<
       dimensions:big-signed-int-size(32),
@@ -972,14 +1099,14 @@ fn decode_array(
       decode_array_elems(rest, decoder, [])
       |> result.map(dynamic.array)
     }
-    _ -> Error("invalid array")
+    _ -> Error(InvalidArray)
   }
 }
 
 fn skip_array_dimensions(
   count: Int,
   bits: BitArray,
-) -> Result(BitArray, String) {
+) -> Result(BitArray, DecodeError) {
   case count {
     0 -> Ok(bits)
     _ ->
@@ -989,16 +1116,16 @@ fn skip_array_dimensions(
           _l_bound:big-signed-int-size(32),
           rest:bits,
         >> -> skip_array_dimensions(count - 1, rest)
-        _ -> Error("invalid array")
+        _ -> Error(InvalidArray)
       }
   }
 }
 
 fn decode_array_elems(
   bits: BitArray,
-  decoder: fn(BitArray) -> Result(Dynamic, String),
+  decoder: fn(BitArray) -> Result(Dynamic, DecodeError),
   acc: List(Dynamic),
-) -> Result(List(Dynamic), String) {
+) -> Result(List(Dynamic), DecodeError) {
   case bits {
     <<>> -> Ok(list.reverse(acc))
     <<-1:big-signed-int-size(32), rest:bits>> -> {
@@ -1015,118 +1142,118 @@ fn decode_array_elems(
           list.prepend(acc, decoded)
           |> decode_array_elems(rest1, decoder, _)
         }
-        _ -> Error("invalid array")
+        _ -> Error(InvalidArray)
       }
     }
-    _ -> Error("invalid array")
+    _ -> Error(InvalidArray)
   }
 }
 
-fn decode_bool(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_bool(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<1:big-signed-int-size(8)>> -> Ok(dynamic.bool(True))
     <<0:big-signed-int-size(8)>> -> Ok(dynamic.bool(False))
-    _ -> Error("invalid bool")
+    _ -> Error(InvalidBool)
   }
 }
 
-fn decode_int2(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_int2(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<num:big-signed-int-size(16)>> -> Ok(dynamic.int(num))
-    _ -> Error("invalid int2")
+    _ -> Error(InvalidInt2)
   }
 }
 
-fn decode_oid(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_oid(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<num:big-unsigned-int-size(32)>> -> Ok(dynamic.int(num))
 
-    _ -> Error("invalid oid")
+    _ -> Error(InvalidOid)
   }
 }
 
-fn decode_int4(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_int4(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<num:big-signed-int-size(32)>> -> Ok(dynamic.int(num))
-    _ -> Error("invalid int4")
+    _ -> Error(InvalidInt4)
   }
 }
 
-fn decode_int8(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_int8(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<num:big-signed-int-size(64)>> -> Ok(dynamic.int(num))
-    _ -> Error("invalid int8")
+    _ -> Error(InvalidInt8)
   }
 }
 
-fn decode_float4(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_float4(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<value:big-float-size(32)>> -> {
       value
       |> dynamic.float
       |> Ok
     }
-    _ -> Error("invalid float4")
+    _ -> Error(InvalidFloat4)
   }
 }
 
-fn decode_float8(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_float8(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<value:big-float-size(64)>> -> {
       value
       |> dynamic.float
       |> Ok
     }
-    _ -> Error("invalid float8")
+    _ -> Error(InvalidFloat8)
   }
 }
 
-fn decode_varchar(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_varchar(bits: BitArray) -> Result(Dynamic, DecodeError) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
-  |> result.replace_error("invalid varchar")
+  |> result.replace_error(InvalidVarchar)
 }
 
-fn decode_text(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_text(bits: BitArray) -> Result(Dynamic, DecodeError) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
-  |> result.replace_error("invalid text")
+  |> result.replace_error(InvalidText)
 }
 
-fn decode_enum(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_enum(bits: BitArray) -> Result(Dynamic, DecodeError) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
-  |> result.replace_error("invalid enum")
+  |> result.replace_error(InvalidEnum)
 }
 
-fn decode_json(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_json(bits: BitArray) -> Result(Dynamic, DecodeError) {
   bit_array.to_string(bits)
   |> result.map(dynamic.string)
-  |> result.replace_error("invalid json")
+  |> result.replace_error(InvalidJson)
 }
 
-fn decode_jsonb(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_jsonb(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<1:int-size(8), rest:bits>> ->
       bit_array.to_string(rest)
       |> result.map(dynamic.string)
-      |> result.replace_error("invalid jsonb")
-    _ -> Error("invalid jsonb")
+      |> result.replace_error(InvalidJsonb)
+    _ -> Error(InvalidJsonb)
   }
 }
 
-fn decode_bytea(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_bytea(bits: BitArray) -> Result(Dynamic, DecodeError) {
   Ok(dynamic.bit_array(bits))
 }
 
-fn decode_uuid(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_uuid(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<_uuid:big-int-size(128)>> -> Ok(dynamic.bit_array(bits))
-    _ -> Error("invalid uuid")
+    _ -> Error(InvalidUuid)
   }
 }
 
-fn decode_hstore(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_hstore(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<size:big-int-size(32), rest:bits>> -> {
       do_decode_hstore(size, rest, dict.new())
@@ -1144,9 +1271,9 @@ fn decode_hstore(bits: BitArray) -> Result(Dynamic, String) {
         })
         |> dynamic.properties
       })
-      |> result.replace_error("invalid hstore")
+      |> result.replace_error(InvalidHstore)
     }
-    _ -> Error("invalid hstore")
+    _ -> Error(InvalidHstore)
   }
 }
 
@@ -1194,7 +1321,7 @@ fn decode_hstore_value(
   }
 }
 
-fn decode_time(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_time(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<microseconds:big-int-size(64)>> -> {
       let tod = from_microseconds(microseconds)
@@ -1207,11 +1334,11 @@ fn decode_time(bits: BitArray) -> Result(Dynamic, String) {
       ])
       |> Ok
     }
-    _ -> Error("invalid time")
+    _ -> Error(InvalidTime)
   }
 }
 
-fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_timestamp(bits: BitArray) -> Result(Dynamic, DecodeError) {
   let pos_infinity = int8_max
   let neg_infinity = -int8_min_abs
 
@@ -1223,7 +1350,7 @@ fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
         _ -> Ok(handle_timestamp(num))
       }
     }
-    _ -> Error("invalid timestamp")
+    _ -> Error(InvalidTimestamp)
   }
 }
 
@@ -1240,7 +1367,7 @@ fn handle_timestamp(microseconds: Int) -> Dynamic {
   |> dynamic.int
 }
 
-fn decode_date(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_date(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<days:big-signed-int-size(32)>> -> {
       days_to_date(days)
@@ -1253,13 +1380,13 @@ fn decode_date(bits: BitArray) -> Result(Dynamic, String) {
           dynamic.int(date.day),
         ])
       })
-      |> result.replace_error("Invalid month")
+      |> result.replace_error(InvalidDate)
     }
-    _ -> Error("invalid date")
+    _ -> Error(InvalidDate)
   }
 }
 
-fn decode_interval(bits: BitArray) -> Result(Dynamic, String) {
+fn decode_interval(bits: BitArray) -> Result(Dynamic, DecodeError) {
   case bits {
     <<
       microseconds:big-signed-int-size(64),
@@ -1273,7 +1400,7 @@ fn decode_interval(bits: BitArray) -> Result(Dynamic, String) {
       ])
       |> Ok
     }
-    _ -> Error("invalid interval")
+    _ -> Error(InvalidInterval)
   }
 }
 
