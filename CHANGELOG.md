@@ -15,6 +15,8 @@
   encoders and decoders for the `tid`, `macaddr`, `point`, `line`, `lseg`,
   and `circle` types. Decoders return the PostgreSQL text output format as
   a string (e.g. `"(1,2)"` for a point)
+- `Path` and `Polygon` values with encoders and decoders for the `path` and
+  `polygon` types, following the same string-decoding convention
 
 ### Changed
 

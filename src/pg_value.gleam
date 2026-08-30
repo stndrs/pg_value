@@ -50,6 +50,8 @@ pub type Value {
   Line(a: Float, b: Float, c: Float)
   LineSegment(x1: Float, y1: Float, x2: Float, y2: Float)
   Circle(center_x: Float, center_y: Float, radius: Float)
+  Path(open: Bool, points: List(#(Float, Float)))
+  Polygon(vertices: List(#(Float, Float)))
 }
 
 pub const null = Null
@@ -143,6 +145,10 @@ pub type DecodeError {
   InvalidLineSegment
   /// Binary data is not a valid circle (three float64 values).
   InvalidCircle
+  /// Binary data is not a valid path (open byte, count, point pairs).
+  InvalidPath
+  /// Binary data is not a valid polygon (count, point pairs).
+  InvalidPolygon
 }
 
 /// Converts an `EncodeError` to a human-readable message.
@@ -198,6 +204,8 @@ pub fn decode_error_to_string(error: DecodeError) -> String {
     InvalidLine -> "invalid line"
     InvalidLineSegment -> "invalid line segment"
     InvalidCircle -> "invalid circle"
+    InvalidPath -> "invalid path"
+    InvalidPolygon -> "invalid polygon"
   }
 }
 
@@ -307,6 +315,17 @@ pub fn circle(center_x: Float, center_y: Float, radius: Float) -> Value {
   Circle(center_x, center_y, radius)
 }
 
+/// Returns a Path value. An open path is rendered with square brackets, a
+/// closed path with parentheses. Each point is an `#(x, y)` pair.
+pub fn path(open: Bool, points: List(#(Float, Float))) -> Value {
+  Path(open, points)
+}
+
+/// Returns a Polygon value. Each vertex is an `#(x, y)` pair.
+pub fn polygon(vertices: List(#(Float, Float))) -> Value {
+  Polygon(vertices)
+}
+
 /// Returns an Array value. Each element is converted using the provided function.
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
@@ -377,7 +396,17 @@ pub fn to_string(value: Value) -> String {
       <> "),"
       <> float64_to_pg_string(radius)
       <> ">'"
+    Path(open, points) -> path_points_to_string(open, points) |> single_quote
+    Polygon(vertices) ->
+      points_to_string(vertices)
+      |> fn(s) { "'(" <> s <> ")'" }
   }
+}
+
+fn points_to_string(points: List(#(Float, Float))) -> String {
+  points
+  |> list.map(fn(point) { point_to_string(point.0, point.1) })
+  |> string.join(",")
 }
 
 fn point_to_string(x: Float, y: Float) -> String {
@@ -669,6 +698,8 @@ pub fn encode(
     LineSegment(x1, y1, x2, y2) -> encode_line_segment(x1, y1, x2, y2, info)
     Circle(center_x, center_y, radius) ->
       encode_circle(center_x, center_y, radius, info)
+    Path(open, points) -> encode_path(open, points, info)
+    Polygon(vertices) -> encode_polygon(vertices, info)
   }
 }
 
@@ -800,6 +831,60 @@ fn encode_circle(
     center_x:big-float-size(64),
     center_y:big-float-size(64),
     radius:big-float-size(64),
+  >>)
+}
+
+fn encode_path(
+  open: Bool,
+  points: List(#(Float, Float)),
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("path_send", info)
+
+  let count = list.length(points)
+  let encoded_points =
+    points
+    |> list.fold(<<>>, fn(acc, point) {
+      <<
+        acc:bits,
+        point.0:big-float-size(64),
+        point.1:big-float-size(64),
+      >>
+    })
+  let open_byte = case open {
+    True -> 0
+    False -> 1
+  }
+
+  Ok(<<
+    { 5 + 16 * count }:big-int-size(32),
+    open_byte,
+    count:big-int-size(32),
+    encoded_points:bits,
+  >>)
+}
+
+fn encode_polygon(
+  vertices: List(#(Float, Float)),
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("poly_send", info)
+
+  let count = list.length(vertices)
+  let encoded_points =
+    vertices
+    |> list.fold(<<>>, fn(acc, point) {
+      <<
+        acc:bits,
+        point.0:big-float-size(64),
+        point.1:big-float-size(64),
+      >>
+    })
+
+  Ok(<<
+    { 4 + 16 * count }:big-int-size(32),
+    count:big-int-size(32),
+    encoded_points:bits,
   >>)
 }
 
@@ -1337,6 +1422,8 @@ pub fn decode(
     "line_recv" -> decode_line(bits)
     "lseg_recv" -> decode_line_segment(bits)
     "circle_recv" -> decode_circle(bits)
+    "path_recv" -> decode_path(bits)
+    "poly_recv" -> decode_polygon(bits)
     _ -> Error(UnsupportedType(info.typereceive))
   }
 }
@@ -1743,6 +1830,64 @@ fn decode_circle(bits: BitArray) -> Result(Dynamic, DecodeError) {
       )
       |> Ok
     _ -> Error(InvalidCircle)
+  }
+}
+
+fn decode_path(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<open_byte, count:big-signed-int-size(32), rest:bits>> if count >= 0 ->
+      case open_byte, decode_point_list(rest, count) {
+        0, Ok(points) ->
+          dynamic.string(path_points_to_string(True, points)) |> Ok
+        1, Ok(points) ->
+          dynamic.string(path_points_to_string(False, points)) |> Ok
+        _, _ -> Error(InvalidPath)
+      }
+    _ -> Error(InvalidPath)
+  }
+}
+
+fn path_points_to_string(open: Bool, points: List(#(Float, Float))) -> String {
+  let inner =
+    points
+    |> list.map(fn(point) { point_to_string(point.0, point.1) })
+    |> string.join(",")
+  case open {
+    True -> "[" <> inner <> "]"
+    False -> "(" <> inner <> ")"
+  }
+}
+
+fn decode_point_list(
+  bits: BitArray,
+  count: Int,
+) -> Result(List(#(Float, Float)), Nil) {
+  case count, bits {
+    0, <<>> -> Ok([])
+    _, <<x:big-float-size(64), y:big-float-size(64), rest:bits>> ->
+      case decode_point_list(rest, count - 1) {
+        Ok(points) -> Ok([#(x, y), ..points])
+        Error(e) -> Error(e)
+      }
+    _, _ -> Error(Nil)
+  }
+}
+
+fn decode_polygon(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<count:big-signed-int-size(32), rest:bits>> if count >= 0 ->
+      case decode_point_list(rest, count) {
+        Ok(vertices) ->
+          dynamic.string(
+            vertices
+            |> list.map(fn(point) { point_to_string(point.0, point.1) })
+            |> string.join(",")
+            |> fn(s) { "(" <> s <> ")" },
+          )
+          |> Ok
+        Error(_) -> Error(InvalidPolygon)
+      }
+    _ -> Error(InvalidPolygon)
   }
 }
 

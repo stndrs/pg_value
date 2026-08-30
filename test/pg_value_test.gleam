@@ -1673,3 +1673,161 @@ pub fn decode_circle_test() {
 pub fn circle_to_string_test() {
   assert "'<(1,2),3.5>'" == value.to_string(value.circle(1.0, 2.0, 3.5))
 }
+
+fn path() {
+  type_info.new(602)
+  |> type_info.typesend("path_send")
+  |> type_info.typereceive("path_recv")
+}
+
+fn polygon() {
+  type_info.new(604)
+  |> type_info.typesend("poly_send")
+  |> type_info.typereceive("poly_recv")
+}
+
+pub fn encode_path_test() {
+  // open=True: open_byte 0; 2 points -> len 5 + 32 = 37
+  let expected = <<
+    37:big-int-size(32),
+    0,
+    2:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(out) =
+    value.encode(value.path(True, [#(1.0, 2.0), #(3.0, 4.0)]), path())
+
+  assert expected == out
+}
+
+pub fn encode_path_closed_test() {
+  // open=False: open_byte 1; 1 point -> len 5 + 16 = 21
+  let expected = <<
+    21:big-int-size(32),
+    1,
+    1:big-int-size(32),
+    1.5:big-float-size(64),
+    2.5:big-float-size(64),
+  >>
+
+  let assert Ok(out) = value.encode(value.path(False, [#(1.5, 2.5)]), path())
+
+  assert expected == out
+}
+
+pub fn encode_path_empty_test() {
+  // empty path: len 5, open byte, count 0
+  let expected = <<5:big-int-size(32), 0, 0:big-int-size(32)>>
+
+  let assert Ok(out) = value.encode(value.path(True, []), path())
+
+  assert expected == out
+}
+
+pub fn encode_path_type_mismatch_test() {
+  let assert Error(value.TypeMismatch("path_send", "oidsend")) =
+    value.encode(value.path(True, []), oid())
+}
+
+pub fn decode_path_test() {
+  let in = <<
+    0,
+    2:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, path())
+  let assert Ok("[(1,2),(3,4)]") = decode.run(result, decode.string)
+}
+
+pub fn decode_path_closed_test() {
+  let in = <<
+    1,
+    2:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, path())
+  let assert Ok("((1,2),(3,4))") = decode.run(result, decode.string)
+}
+
+pub fn decode_path_error_test() {
+  // bad open byte
+  let assert Error(value.InvalidPath) =
+    value.decode(<<7, 0:big-int-size(32)>>, path())
+
+  // count/point mismatch: count 1 but no bytes
+  let assert Error(value.InvalidPath) =
+    value.decode(<<0, 1:big-int-size(32)>>, path())
+}
+
+pub fn path_to_string_test() {
+  assert "'[(1,2),(3,4)]'"
+    == value.to_string(value.path(True, [#(1.0, 2.0), #(3.0, 4.0)]))
+  assert "'((1,2),(3,4))'"
+    == value.to_string(value.path(False, [#(1.0, 2.0), #(3.0, 4.0)]))
+}
+
+pub fn encode_polygon_test() {
+  // 2 vertices -> len 4 + 32 = 36
+  let expected = <<
+    36:big-int-size(32),
+    2:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(out) =
+    value.encode(value.polygon([#(1.0, 2.0), #(3.0, 4.0)]), polygon())
+
+  assert expected == out
+}
+
+pub fn encode_polygon_empty_test() {
+  let expected = <<4:big-int-size(32), 0:big-int-size(32)>>
+
+  let assert Ok(out) = value.encode(value.polygon([]), polygon())
+
+  assert expected == out
+}
+
+pub fn encode_polygon_type_mismatch_test() {
+  let assert Error(value.TypeMismatch("poly_send", "oidsend")) =
+    value.encode(value.polygon([]), oid())
+}
+
+pub fn decode_polygon_test() {
+  let in = <<
+    2:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, polygon())
+  let assert Ok("((1,2),(3,4))") = decode.run(result, decode.string)
+}
+
+pub fn decode_polygon_error_test() {
+  // count 1 but no point bytes
+  let assert Error(value.InvalidPolygon) =
+    value.decode(<<1:big-int-size(32)>>, polygon())
+}
+
+pub fn polygon_to_string_test() {
+  assert "'((1,2),(3,4))'"
+    == value.to_string(value.polygon([#(1.0, 2.0), #(3.0, 4.0)]))
+}
