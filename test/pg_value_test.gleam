@@ -62,7 +62,7 @@ pub fn uuid_v4_to_string_test() {
 
   let uuid = value.uuid(<<v4_uuid:big-int-size(128)>>)
 
-  assert "85eab1c3-7acc-4d82-88e4-5fc1a9daa9d8" == value.to_string(uuid)
+  assert "'85eab1c3-7acc-4d82-88e4-5fc1a9daa9d8'" == value.to_string(uuid)
 }
 
 pub fn uuid_v7_to_string_test() {
@@ -70,7 +70,7 @@ pub fn uuid_v7_to_string_test() {
 
   let uuid = value.uuid(<<v7_uuid:big-int-size(128)>>)
 
-  assert "019c39ce-0a5a-7dca-bfaf-8d79ed0db096" == value.to_string(uuid)
+  assert "'019c39ce-0a5a-7dca-bfaf-8d79ed0db096'" == value.to_string(uuid)
 }
 
 pub fn hstore_to_string_test() {
@@ -123,18 +123,20 @@ pub fn time_to_string_test() {
     == value.time(calendar.TimeOfDay(14, 30, 45, 0)) |> value.to_string
   assert "'00:00:00'"
     == value.time(calendar.TimeOfDay(0, 0, 0, 0)) |> value.to_string
-  assert "'23:59:59.123'"
+  assert "'23:59:59.123456'"
     == value.time(calendar.TimeOfDay(23, 59, 59, 123_456_000))
     |> value.to_string
   assert "'09:05:03'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 0)) |> value.to_string
-  assert "'09:05:03.400'"
+  assert "'09:05:03.4'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 400_000_000))
     |> value.to_string
   assert "'09:05:03.012'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 12_000_000)) |> value.to_string
   assert "'09:05:03.007'"
     == value.time(calendar.TimeOfDay(9, 5, 3, 7_000_000)) |> value.to_string
+  assert "'09:05:03.000123'"
+    == value.time(calendar.TimeOfDay(9, 5, 3, 123_000)) |> value.to_string
 }
 
 pub fn date_to_string_test() {
@@ -146,6 +148,12 @@ pub fn date_to_string_test() {
     |> value.to_string
   assert "'2000-12-31'"
     == value.date(calendar.Date(2000, calendar.December, 31))
+    |> value.to_string
+  assert "'0033-01-15'"
+    == value.date(calendar.Date(33, calendar.January, 15))
+    |> value.to_string
+  assert "'0001-01-01'"
+    == value.date(calendar.Date(1, calendar.January, 1))
     |> value.to_string
 }
 
@@ -228,6 +236,13 @@ pub fn json_to_string_test() {
 
   let val = json.object([#("name", json.string("O'Brien"))]) |> value.json
   assert "'{\"name\":\"O''Brien\"}'" == val |> value.to_string
+}
+
+pub fn array_to_string_test() {
+  assert "ARRAY[1, 2, 3]"
+    == value.array([1, 2, 3], of: value.int) |> value.to_string
+  assert "ARRAY[42]" == value.array([42], of: value.int) |> value.to_string
+  assert "'{}'" == value.array([], of: value.int) |> value.to_string
 }
 
 pub fn nullable_test() {
@@ -474,6 +489,26 @@ pub fn decode_char_test() {
   assert out == result
 }
 
+pub fn decode_bpchar_test() {
+  use valid <- list.map(["A", "padded   ", ""])
+
+  let in = <<valid:utf8>>
+  let out = dynamic.string(valid)
+
+  let assert Ok(result) = value.decode(in, bpchar())
+
+  assert out == result
+}
+
+pub fn encode_bpchar_test() {
+  let in = value.text("abc")
+  let expected = <<3:big-int-size(32), "abc":utf8>>
+
+  let assert Ok(out) = value.encode(in, bpchar())
+
+  assert expected == out
+}
+
 pub fn decode_name_test() {
   use valid <- list.map(["table_name", "", "column_name"])
 
@@ -514,6 +549,15 @@ pub fn decode_hstore_test() {
     decode.run(out, decode.dict(decode.string, decode.optional(decode.string)))
 
   assert data == decoded
+}
+
+pub fn decode_hstore_malformed_test() {
+  // Declared count 0 but trailing bytes present.
+  let in = <<0:big-int-size(32), 1, 2, 3>>
+
+  let assert Error(msg) = value.decode(in, hstore())
+
+  assert "invalid hstore" == msg
 }
 
 pub fn decode_enum_test() {
@@ -614,6 +658,16 @@ pub fn decode_time_test() {
   assert expected_time == time
 }
 
+pub fn decode_time_max_test() {
+  let in = <<86_400_000_000:big-int-size(64)>>
+
+  let assert Ok(result) = value.decode(in, time())
+
+  let assert Ok(time) = decode.run(result, value.time_decoder())
+
+  assert calendar.TimeOfDay(24, 0, 0, 0) == time
+}
+
 pub fn decode_time_error_test() {
   let in = <<1:big-int-size(32)>>
   let out = "invalid time"
@@ -695,7 +749,7 @@ pub fn encode_bool_test() {
 pub fn encode_bool_validation_error_test() {
   let assert Error(msg) = value.encode(value.true, int2())
 
-  assert msg == "Attempted to encode boolsend as int2send"
+  assert msg == "Type mismatch: expected boolsend, got int2send"
 }
 
 pub fn encode_int2_test() {
@@ -912,12 +966,24 @@ pub fn encode_date_test() {
   assert expected == out
 }
 
+pub fn encode_date_invalid_test() {
+  use invalid <- list.map([
+    calendar.Date(2025, calendar.February, 30),
+    calendar.Date(2025, calendar.January, 0),
+    calendar.Date(2023, calendar.February, 29),
+  ])
+
+  let assert Error(msg) = value.encode(value.date(invalid), date())
+
+  assert "Invalid date" == msg
+}
+
 pub fn encode_date_validation_error_test() {
   let assert Error(msg) =
     value.date(calendar.Date(2025, calendar.January, 10))
     |> value.encode(float4())
 
-  assert msg == "Attempted to encode date_send as float4send"
+  assert msg == "Type mismatch: expected date_send, got float4send"
 }
 
 pub fn encode_time_test() {
@@ -936,7 +1002,7 @@ pub fn encode_time_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.time(calendar.TimeOfDay(20, 10, 30, 0)), float4())
 
-  assert msg == "Attempted to encode time_send as float4send"
+  assert msg == "Type mismatch: expected time_send, got float4send"
 }
 
 pub fn encode_timestamp_test() {
@@ -954,7 +1020,7 @@ pub fn encode_timestamp_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.timestamp(timestamp.system_time()), float4())
 
-  assert msg == "Attempted to encode timestamp_send as float4send"
+  assert msg == "Type mismatch: expected timestamp_send, got float4send"
 }
 
 fn to_microseconds(
@@ -989,7 +1055,7 @@ pub fn encode_interval_validation_error_test() {
 
   let assert Error(msg) = value.encode(val, float4())
 
-  assert msg == "Attempted to encode interval_send as float4send"
+  assert msg == "Type mismatch: expected interval_send, got float4send"
 }
 
 pub fn encode_enum_test() {
@@ -1008,7 +1074,7 @@ pub fn encode_enum_test() {
 pub fn encode_enum_validation_error_test() {
   let assert Error(msg) = value.encode(value.enum("active"), float4())
 
-  assert msg == "Attempted to encode enum_send as float4send"
+  assert msg == "Type mismatch: expected enum_send, got float4send"
 }
 
 pub fn encode_json_test() {
@@ -1124,7 +1190,7 @@ pub fn encode_timestamptz_validation_error_test() {
     value.timestamptz(timestamp.system_time(), duration.hours(8))
     |> value.encode(float4())
 
-  assert msg == "Attempted to encode timestamptz_send as float4send"
+  assert msg == "Type mismatch: expected timestamptz_send, got float4send"
 }
 
 pub fn empty_array_test() {
@@ -1185,13 +1251,13 @@ pub fn nested_array_test() {
 
   let expected = <<
     // total size of encoded array
-    68:big-int-size(32),
+    44:big-int-size(32),
     // number of dimensions
     2:big-int-size(32),
     // flags (has_nulls)
     0:big-int-size(32),
-    // element OID
-    143:big-int-size(32),
+    // scalar element OID (int4)
+    23:big-int-size(32),
     // size of first dimension
     1:big-int-size(32),
     // lower bound
@@ -1200,19 +1266,7 @@ pub fn nested_array_test() {
     2:big-int-size(32),
     // lower bound
     1:big-int-size(32),
-    // elems (nested array)
-    36:big-int-size(32),
-    // number of dimensions
-    1:big-int-size(32),
-    // flags (has_nulls)
-    0:big-int-size(32),
-    // element OID
-    23:big-int-size(32),
-    // size of second dimension
-    2:big-int-size(32),
-    // lower bound
-    1:big-int-size(32),
-    // elems (int4)
+    // flat elements (int4) in row-major order
     // size of element
     4:big-int-size(32),
     // element
@@ -1228,11 +1282,23 @@ pub fn nested_array_test() {
   assert expected == out
 }
 
+pub fn ragged_array_test() {
+  let in =
+    value.Array([
+      value.array([1, 2], of: value.int),
+      value.array([3], of: value.int),
+    ])
+
+  let assert Error(msg) = value.encode(in, array(array(int4())))
+
+  assert "Array is not rectangular" == msg
+}
+
 pub fn encode_array_validation_error_test() {
   let assert Error(msg) =
     value.encode(value.array([10, 12], of: value.int), float4())
 
-  assert msg == "Attempted to encode array_send as float4send"
+  assert msg == "Type mismatch: expected array_send, got float4send"
 }
 
 pub fn encode_bytea_test() {
@@ -1318,6 +1384,12 @@ fn char() {
   type_info.new(18)
   |> type_info.typesend("charsend")
   |> type_info.typereceive("charrecv")
+}
+
+fn bpchar() {
+  type_info.new(1042)
+  |> type_info.typesend("bpcharsend")
+  |> type_info.typereceive("bpcharrecv")
 }
 
 fn name() {

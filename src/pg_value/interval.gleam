@@ -64,6 +64,15 @@ pub fn add(left: Interval, right: Interval) -> Interval {
 ///
 /// `Interval(months: 0, days: 0, seconds: 10, microseconds: 1_200_000)` will be
 /// formatted as "PT11.2S"
+///
+/// PostgreSQL intervals are signed. The seconds and microseconds components are
+/// normalized to a single combined signed value, so e.g.
+/// `Interval(0, 0, 0, -500_000)` is formatted as "PT-0.5S" and
+/// `Interval(0, 0, 10, -200_000)` as "PT9.8S".
+///
+/// Negative month/day components are emitted directly, e.g. "P-1M". This
+/// is accepted by PostgreSQL's interval parser but is not strictly valid ISO
+/// 8601, which has no representation for negative individual components.
 pub fn to_iso8601_string(interval: Interval) -> String {
   case interval {
     Interval(0, 0, 0, 0) -> "PT0S"
@@ -73,10 +82,13 @@ pub fn to_iso8601_string(interval: Interval) -> String {
         |> append_to_iso8601_string(months, "M")
         |> append_to_iso8601_string(days, "D")
 
-      let #(seconds, usecs) = to_seconds_and_microseconds(usecs)
-      let seconds = seconds + secs
+      // Combine seconds and microseconds into a single signed microsecond
+      // total so the sign is consistent and printed exactly once.
+      let total_usecs = { secs * 1_000_000 } + usecs
+      let #(seconds, fractional_usecs) =
+        to_seconds_and_microseconds(total_usecs)
 
-      case seconds, usecs {
+      case seconds, fractional_usecs {
         0, 0 -> iso8601
         _, 0 -> {
           iso8601
@@ -84,11 +96,21 @@ pub fn to_iso8601_string(interval: Interval) -> String {
           |> append_to_iso8601_string(seconds, "S")
         }
         _, _ -> {
+          let sign = case seconds < 0 || fractional_usecs < 0 {
+            True -> "-"
+            False -> ""
+          }
+
           iso8601
           |> string.append("T")
-          |> string.append(int.to_string(seconds))
+          |> string.append(sign)
+          |> string.append(int.to_string(int.absolute_value(seconds)))
           |> string.append(".")
-          |> string.append(microsecond_digits(usecs, 0, ""))
+          |> string.append(microsecond_digits(
+            int.absolute_value(fractional_usecs),
+            0,
+            "",
+          ))
           |> string.append("S")
         }
       }
@@ -96,7 +118,11 @@ pub fn to_iso8601_string(interval: Interval) -> String {
   }
 }
 
-fn append_to_iso8601_string(iso8601: String, count: Int, unit: String) -> String {
+fn append_to_iso8601_string(
+  iso8601: String,
+  count: Int,
+  unit: String,
+) -> String {
   use <- bool.guard(count == 0, return: iso8601)
 
   iso8601 <> int.to_string(count) <> unit

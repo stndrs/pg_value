@@ -15,7 +15,7 @@ Designed to be used by PostgreSQL client libraries. Currently used by
 | `boolean` | `Bool` | `Bool` |
 | `smallint`, `integer`, `bigint`, `oid` | `Int` | `Int` |
 | `real`, `double precision` | `Float` | `Float` |
-| `text`, `varchar`, `char`, `name` | `Text` | `String` |
+| `text`, `varchar`, `char(n)`/`bpchar`, `name` | `Text` | `String` |
 | `bytea` | `Bytea` | `BitArray` |
 | `uuid` | `Uuid` | `BitArray` |
 | `time` | `Time` | `gleam/time/calendar.TimeOfDay` |
@@ -28,6 +28,9 @@ Designed to be used by PostgreSQL client libraries. Currently used by
 | enum types | `Enum` | `String` |
 | arrays | `Array` | `List(Value)` |
 | | `Null` | |
+
+The text path covers `char(n)` (`bpchar`). The internal single-byte `"char"`
+type (`charsend`, oid 18) is also handled as text.
 
 ## Usage
 
@@ -74,6 +77,24 @@ Typed decoders are provided for time types and intervals:
 - `pg_value.date_decoder()` decodes into `gleam/time/calendar.Date`
 - `pg_value.timestamp_decoder()` decodes into `gleam/time/timestamp.Timestamp`
 - `interval.decoder()` decodes into `pg_value/interval.Interval`
+
+## Notes
+
+### `timestamptz` convention
+
+When encoding a `Timestamptz`, the `Timestamp` is treated as a wall-clock time
+in the given zone and the offset is subtracted to produce the UTC instant on
+the wire. Decoding always yields the UTC instant with no offset, so
+`decode(encode(Timestamptz(ts, offset)))` equals `ts` only when `offset` is
+zero. If your `Timestamp` is already an absolute UTC instant, pass a zero
+offset.
+
+### `timestamp` infinity
+
+Finite timestamps decode to an integer microsecond `Dynamic`, but PostgreSQL's
+`infinity`/`-infinity` decode to the strings `"infinity"`/`"-infinity"`. The
+provided `timestamp_decoder()` only handles finite values; decode infinity
+separately (e.g. with `decode.string`).
 
 ## Installation
 

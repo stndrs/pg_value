@@ -92,6 +92,9 @@ pub fn elem_type(ti: TypeInfo, elem_type: Option(TypeInfo)) -> TypeInfo {
 }
 
 /// Sets the comp_types value of a TypeInfo record.
-pub fn comp_types(ti: TypeInfo, comp_types: Option(List(TypeInfo))) -> TypeInfo {
+pub fn comp_types(
+  ti: TypeInfo,
+  comp_types: Option(List(TypeInfo)),
+) -> TypeInfo {
   TypeInfo(..ti, comp_types:)
 }

@@ -103,7 +103,7 @@ pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
   Timestamp(timestamp)
 }
 
-/// Returns a Timestamp value with a timezone offset.
+/// Returns a Timestamptz value with a timezone offset.
 pub fn timestamptz(
   timestamp: timestamp.Timestamp,
   offset: duration.Duration,
@@ -166,7 +166,7 @@ pub fn to_string(value: Value) -> String {
     Timestamptz(ts, offset) -> timestamptz_to_string(ts, offset)
     Interval(val) -> interval.to_iso8601_string(val) |> single_quote
     Array(vals) -> array_to_string(vals)
-    Uuid(val) -> uuid_to_string(val)
+    Uuid(val) -> uuid_to_string(val) |> single_quote
     Hstore(val) -> hstore_to_string(val)
     Enum(val) -> string.replace(in: val, each: "'", with: "''") |> single_quote
     Json(val) ->
@@ -202,7 +202,12 @@ fn escape(str: String) -> String {
 }
 
 fn uuid_to_string(uuid: BitArray) -> String {
-  do_uuid_to_string(uuid, 0, "", "-")
+  // A UUID is exactly 128 bits. Reject other sizes rather than silently
+  // truncating to a shorter, invalid literal.
+  case uuid {
+    <<_:big-int-size(128)>> -> do_uuid_to_string(uuid, 0, "", "-")
+    _ -> ""
+  }
 }
 
 fn do_uuid_to_string(
@@ -233,17 +238,20 @@ fn text_to_string(text: String) -> String {
 
 // https://www.postgresql.org/docs/current/arrays.html#ARRAYS-INPUT
 fn array_to_string(array: List(Value)) -> String {
-  let elems = case array {
-    [] -> ""
-    [val] -> to_string(val)
+  case array {
+    // PostgreSQL rejects a bare `ARRAY[]` without a type cast, so emit the
+    // typeless empty-array literal instead.
+    [] -> "'{}'"
+    [val] -> "ARRAY[" <> to_string(val) <> "]"
     vals -> {
-      vals
-      |> list.map(to_string)
-      |> string.join(", ")
+      let elems =
+        vals
+        |> list.map(to_string)
+        |> string.join(", ")
+
+      "ARRAY[" <> elems <> "]"
     }
   }
-
-  "ARRAY[" <> elems <> "]"
 }
 
 // https://www.postgresql.org/docs/current/datatype-boolean.html#DATATYPE-BOOLEAN
@@ -262,7 +270,7 @@ fn bytea_to_string(bytea: BitArray) -> String {
 }
 
 fn date_to_string(date: calendar.Date) -> String {
-  let year = int.to_string(date.year)
+  let year = pad(date.year, 4)
   let month = calendar.month_to_int(date.month) |> pad_zero
   let day = pad_zero(date.day)
 
@@ -275,18 +283,27 @@ fn time_to_string(time_of_day: calendar.TimeOfDay) -> String {
   let hours = pad_zero(time_of_day.hours)
   let minutes = pad_zero(time_of_day.minutes)
   let seconds = pad_zero(time_of_day.seconds)
-  let milliseconds = time_of_day.nanoseconds / 1_000_000
+  let microseconds = time_of_day.nanoseconds / 1000
 
-  let msecs = case milliseconds < 100 {
-    True if milliseconds == 0 -> ""
-    True if milliseconds < 10 -> ".00" <> int.to_string(milliseconds)
-    True -> ".0" <> int.to_string(milliseconds)
-    False -> "." <> int.to_string(milliseconds)
+  let fractional = case microseconds {
+    0 -> ""
+    _ -> {
+      // Pad to 6 digits then trim trailing zeros for microsecond precision.
+      let digits = pad(microseconds, 6)
+      "." <> trim_trailing_zeros(digits)
+    }
   }
 
-  let time = hours <> ":" <> minutes <> ":" <> seconds <> msecs
+  let time = hours <> ":" <> minutes <> ":" <> seconds <> fractional
 
   single_quote(time)
+}
+
+fn trim_trailing_zeros(str: String) -> String {
+  case string.ends_with(str, "0") {
+    True -> trim_trailing_zeros(string.drop_end(str, 1))
+    False -> str
+  }
 }
 
 fn timestamp_to_string(timestamp: timestamp.Timestamp) -> String {
@@ -318,6 +335,17 @@ fn pad_zero(n: Int) -> String {
   }
 }
 
+// Left-pads a non-negative integer with zeros to at least `width` digits.
+fn pad(n: Int, width: Int) -> String {
+  let str = int.to_string(n)
+  let len = string.length(str)
+
+  case len < width {
+    True -> string.repeat("0", width - len) <> str
+    False -> str
+  }
+}
+
 /// Returns a decoder for `TimeOfDay` values.
 pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
   use hours <- decode.field(0, decode.int)
@@ -332,6 +360,12 @@ pub fn time_decoder() -> decode.Decoder(calendar.TimeOfDay) {
 }
 
 /// Returns a decoder for `Timestamp` values.
+///
+/// This decoder expects the finite, integer-microsecond representation produced
+/// by `decode` for `timestamp`/`timestamptz`. PostgreSQL's `infinity` and
+/// `-infinity` decode to the strings `"infinity"`/`"-infinity"` instead, which
+/// this decoder does not handle; decode those cases separately (for example
+/// with `decode.string`).
 pub fn timestamp_decoder() -> decode.Decoder(timestamp.Timestamp) {
   use microseconds <- decode.map(decode.int)
   let seconds = microseconds / 1_000_000
@@ -387,7 +421,7 @@ fn validate_typesend(
 ) -> Result(t, String) {
   use <- bool.lazy_guard(when: expected == info.typesend, return: next)
 
-  Error("Attempted to encode " <> expected <> " as " <> info.typesend)
+  Error("Type mismatch: expected " <> expected <> ", got " <> info.typesend)
 }
 
 fn encode_uuid(
@@ -409,16 +443,14 @@ fn encode_hstore(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("hstore_send", info)
 
-  use encoded <- result.map(do_encode_hstore(hstore))
+  let encoded = do_encode_hstore(hstore)
 
   let size = bit_array.byte_size(encoded)
 
-  <<size:big-int-size(32), encoded:bits>>
+  Ok(<<size:big-int-size(32), encoded:bits>>)
 }
 
-fn do_encode_hstore(
-  hstore: Dict(String, Option(String)),
-) -> Result(BitArray, String) {
+fn do_encode_hstore(hstore: Dict(String, Option(String))) -> BitArray {
   let encoded =
     hstore
     |> dict.to_list
@@ -446,7 +478,7 @@ fn do_encode_hstore(
 
   let size = dict.size(hstore)
 
-  Ok(<<size:big-int-size(32), encoded:bits>>)
+  <<size:big-int-size(32), encoded:bits>>
 }
 
 fn encode_array(
@@ -455,35 +487,108 @@ fn encode_array(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("array_send", info)
 
-  let dimensions = arr_dims(elems)
-
   case info.elem_type {
     Some(elem_ti) -> {
-      elems
-      |> list.try_map(encode(_, elem_ti))
-      |> result.try(fn(encoded_elems) {
-        let has_nulls = list.contains(encoded_elems, <<-1:big-int-size(32)>>)
+      // PostgreSQL's wire format flattens multidimensional arrays. A header
+      // (ndim, flags, scalar element oid), one {len, lower bound} pair per
+      // dimension, and the leaf elements laid out flat in row-major order.
+      let scalar_ti = scalar_elem_type(elem_ti)
 
-        do_encode_array(dimensions, has_nulls, elem_ti, encoded_elems)
-      })
+      use dimensions <- result.try(array_dimensions(elems))
+      use leaves <- result.try(array_leaves(elems))
+
+      use encoded_elems <- result.try(
+        list.try_map(leaves, encode(_, scalar_ti)),
+      )
+
+      let has_nulls = list.contains(encoded_elems, <<-1:big-int-size(32)>>)
+
+      do_encode_array(dimensions, has_nulls, scalar_ti, encoded_elems)
     }
     None -> Error("Missing elem type info")
   }
 }
 
-fn arr_dims(elems: List(Value)) -> List(Int) {
+// Resolves the scalar (non-array) element TypeInfo by descending through any
+// nested array element types. Multidimensional arrays share a single scalar
+// element type on the wire.
+fn scalar_elem_type(info: type_info.TypeInfo) -> type_info.TypeInfo {
+  case info.typesend, info.elem_type {
+    "array_send", Some(inner) -> scalar_elem_type(inner)
+    _, _ -> info
+  }
+}
+
+// Determines the dimensions of a (possibly nested) array, validating that it
+// is rectangular. Every sibling sub-array at a given depth must have the same
+// length, and elements at a given depth must all be arrays or all be scalars.
+fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
   case elems {
-    [] -> []
-    [Array(inner), ..] -> {
-      let inner_dims = arr_dims(inner)
+    [] -> Ok([])
+    [Array(inner), ..rest] -> {
       let dim = list.length(elems)
-      [dim, ..inner_dims]
+
+      use <- bool.guard(
+        when: !list.all(rest, is_array),
+        return: Error("Array is not rectangular"),
+      )
+
+      use inner_dims <- result.try(array_dimensions(inner))
+
+      // Ensure every sibling sub-array shares the same inner dimensions.
+      use <- bool.guard(
+        when: !list.all(rest, ensure_sub_array_dimensions(_, inner_dims)),
+        return: Error("Array is not rectangular"),
+      )
+
+      Ok([dim, ..inner_dims])
     }
-    elems -> {
-      let dim = list.length(elems)
-      [dim]
+    _ -> {
+      use <- bool.guard(
+        when: list.any(elems, is_array),
+        return: Error("Array is not rectangular"),
+      )
+
+      Ok([list.length(elems)])
     }
   }
+}
+
+fn ensure_sub_array_dimensions(
+  sub_array: Value,
+  dimensions: List(Int),
+) -> Bool {
+  case sub_array {
+    Array(other) -> array_dimensions(other) == Ok(dimensions)
+    _ -> False
+  }
+}
+
+fn is_array(value: Value) -> Bool {
+  case value {
+    Array(_) -> True
+    _ -> False
+  }
+}
+
+// Flattens a (possibly nested) array into its leaf scalar values in row-major
+// order.
+fn array_leaves(elems: List(Value)) -> Result(List(Value), String) {
+  list.try_fold(elems, [], fn(acc, elem) {
+    case elem {
+      Array(inner) -> {
+        use inner_leaves <- result.map(array_leaves(inner))
+
+        list.prepend(acc, inner_leaves)
+      }
+      _ -> Ok(list.prepend(acc, [elem]))
+    }
+  })
+  |> result.map(fn(leaves) {
+    leaves
+    |> list.reverse
+    |> list.flatten
+  })
 }
 
 fn do_encode_array(
@@ -534,7 +639,10 @@ fn encode_null() -> Result(BitArray, String) {
   Ok(<<-1:big-int-size(32)>>)
 }
 
-fn encode_bool(bool: Bool, info: type_info.TypeInfo) -> Result(BitArray, String) {
+fn encode_bool(
+  bool: Bool,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, String) {
   use <- validate_typesend("boolsend", info)
 
   case bool {
@@ -570,7 +678,7 @@ fn encode_int(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int2(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int2send", info)
 
-  case -int2_min <= num && num <= int2_max {
+  case -int2_min_abs <= num && num <= int2_max {
     True -> Ok(<<2:big-int-size(32), num:big-int-size(16)>>)
     False -> Error("Out of range for int2")
   }
@@ -579,7 +687,7 @@ fn encode_int2(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int4(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int4send", info)
 
-  case -int4_min <= num && num <= int4_max {
+  case -int4_min_abs <= num && num <= int4_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
     False -> Error("Out of range for int4")
   }
@@ -588,7 +696,7 @@ fn encode_int4(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
 fn encode_int8(num: Int, info: type_info.TypeInfo) -> Result(BitArray, String) {
   use <- validate_typesend("int8send", info)
 
-  case -int8_min <= num && num <= int8_max {
+  case -int8_min_abs <= num && num <= int8_max {
     True -> Ok(<<8:big-int-size(32), num:big-int-size(64)>>)
     False -> Error("Out of range for int8")
   }
@@ -638,6 +746,7 @@ fn encode_text(
     "varcharsend" -> encoder(text)
     "textsend" -> encoder(text)
     "charsend" -> encoder(text)
+    "bpcharsend" -> encoder(text)
     "namesend" -> encoder(text)
     _ -> Error("Attempted to encode '" <> text <> "' as " <> info.typesend)
   }
@@ -692,15 +801,44 @@ fn encode_date(
 ) -> Result(BitArray, String) {
   use <- validate_typesend("date_send", info)
 
-  let gregorian_days =
-    date_to_gregorian_days(
-      date.year,
-      calendar.month_to_int(date.month),
-      date.day,
-    )
+  let month = calendar.month_to_int(date.month)
+
+  // calendar:date_to_gregorian_days/3 raises for invalid dates (Feb 30, day 0,
+  // year < 1, etc.), so validate up front to honour the Result contract.
+  use <- bool.guard(
+    when: !is_valid_date(date.year, month, date.day),
+    return: Error("Invalid date"),
+  )
+
+  let gregorian_days = date_to_gregorian_days(date.year, month, date.day)
   let pg_days = gregorian_days - postgres_gd_epoch
 
   Ok(<<4:big-int-size(32), pg_days:big-int-size(32)>>)
+}
+
+fn is_valid_date(year: Int, month: Int, day: Int) -> Bool {
+  year >= 1
+  && month >= 1
+  && month <= 12
+  && day >= 1
+  && day <= days_in_month(year, month)
+}
+
+fn days_in_month(year: Int, month: Int) -> Int {
+  case month {
+    1 | 3 | 5 | 7 | 8 | 10 | 12 -> 31
+    4 | 6 | 9 | 11 -> 30
+    2 ->
+      case is_leap_year(year) {
+        True -> 29
+        False -> 28
+      }
+    _ -> 0
+  }
+}
+
+fn is_leap_year(year: Int) -> Bool {
+  { year % 4 == 0 && year % 100 != 0 } || year % 400 == 0
 }
 
 fn encode_time(
@@ -800,6 +938,7 @@ pub fn decode(
     "varcharrecv" -> decode_varchar(bits)
     "namerecv" -> decode_text(bits)
     "charrecv" -> decode_text(bits)
+    "bpcharrecv" -> decode_text(bits)
     "bytearecv" -> decode_bytea(bits)
     "uuid_recv" -> decode_uuid(bits)
     "hstore_recv" -> decode_hstore(bits)
@@ -826,38 +965,32 @@ fn decode_array(
       _elem_oid:big-signed-int-size(32),
       rest:bits,
     >> -> {
-      use data <- result.try(do_decode_array(dimensions, rest, []))
+      // The per-dimension {length, lower bound} headers are consumed but not
+      // needed. Elements are decoded flat in row-major order.
+      use rest <- result.try(skip_array_dimensions(dimensions, rest))
 
-      decode_array_elems(data.0, decoder, [])
+      decode_array_elems(rest, decoder, [])
       |> result.map(dynamic.array)
     }
     _ -> Error("invalid array")
   }
 }
 
-fn do_decode_array(
+fn skip_array_dimensions(
   count: Int,
   bits: BitArray,
-  acc: List(#(Int, Int)),
-) -> Result(#(BitArray, List(#(Int, Int))), String) {
+) -> Result(BitArray, String) {
   case count {
-    0 -> Ok(#(bits, acc))
-    idx -> {
+    0 -> Ok(bits)
+    _ ->
       case bits {
         <<
-          nbr:big-signed-int-size(32),
-          l_bound:big-signed-int-size(32),
-          rest1:bits,
-        >> -> {
-          let current = #(nbr, l_bound)
-
-          let data_info1 = list.prepend(acc, current)
-
-          do_decode_array({ idx - 1 }, rest1, data_info1)
-        }
+          _nbr:big-signed-int-size(32),
+          _l_bound:big-signed-int-size(32),
+          rest:bits,
+        >> -> skip_array_dimensions(count - 1, rest)
         _ -> Error("invalid array")
       }
-    }
   }
 }
 
@@ -1024,6 +1157,7 @@ fn do_decode_hstore(
 ) -> Result(Dict(String, Option(String)), Nil) {
   case size, bits {
     0, <<>> -> Ok(acc)
+    0, _ -> Error(Nil)
     size, bits1 -> {
       use #(key, rest) <- result.try(decode_hstore_key(bits1))
       use #(val, rest1) <- result.try(decode_hstore_value(rest))
@@ -1079,7 +1213,7 @@ fn decode_time(bits: BitArray) -> Result(Dynamic, String) {
 
 fn decode_timestamp(bits: BitArray) -> Result(Dynamic, String) {
   let pos_infinity = int8_max
-  let neg_infinity = -int8_min
+  let neg_infinity = -int8_min_abs
 
   case bits {
     <<num:signed-big-int-size(64)>> -> {
@@ -1147,7 +1281,9 @@ fn from_microseconds(usecs: Int) -> calendar.TimeOfDay {
   let seconds = usecs / usecs_per_sec
   let nanoseconds = { usecs % usecs_per_sec } * 1000
 
-  let #(hours, minutes, seconds) = seconds_to_time(seconds)
+  let hours = seconds / 3600
+  let minutes = { seconds % 3600 } / 60
+  let seconds = seconds % 60
 
   calendar.TimeOfDay(hours:, minutes:, seconds:, nanoseconds:)
 }
@@ -1176,17 +1312,17 @@ fn unix_seconds_before_postgres_epoch() -> duration.Duration {
 
 const oid_max = 0xFFFFFFFF
 
-const int2_min = 0x8000
+const int2_min_abs = 0x8000
 
 const int2_max = 0x7FFF
 
-const int4_min = 0x80000000
+const int4_min_abs = 0x80000000
 
 const int4_max = 0x7FFFFFFF
 
 const int8_max = 0x7FFFFFFFFFFFFFFF
 
-const int8_min = 0x8000000000000000
+const int8_min_abs = 0x8000000000000000
 
 // Seconds between Jan 1, 0001 and Jan 1, 2000
 const postgres_gs_epoch = 63_113_904_000
@@ -1203,9 +1339,6 @@ const nsecs_per_usec = 1000
 
 @external(erlang, "calendar", "gregorian_days_to_date")
 fn gregorian_days_to_date(days: Int) -> #(Int, Int, Int)
-
-@external(erlang, "calendar", "seconds_to_time")
-fn seconds_to_time(seconds: Int) -> #(Int, Int, Int)
 
 @external(erlang, "calendar", "date_to_gregorian_days")
 fn date_to_gregorian_days(year: Int, month: Int, day: Int) -> Int

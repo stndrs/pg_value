@@ -1,5 +1,27 @@
 # Changelog
 
+## 3.1.0
+
+### Added
+
+- `bpchar` support in text encode and decode paths
+
+### Changed
+
+- `uuid` `to_string` output is now single-quoted
+- Empty arrays now encode as `'{}'` instead of `ARRAY[]`
+- `time_to_string` now emits microsecond precision
+- Type mismatch error message now reads `Type mismatch: expected X, got Y`
+
+### Fixed
+
+- `to_iso8601_string` printed two signs for negative intervals
+- `decode_time` crashed on `24:00:00`
+- `encode_date` crashed on invalid dates. The function now returns `Error`
+- `uuid_to_string` truncated UUIDs that are not 128 bits. The function now rejects them
+- Years are zero-padded to 4 digits in `date_to_string`
+- Hstores with trailing bytes after the declared count are now rejected
+
 ## 3.0.1
 
 - Updated `gleam_stdlib`
