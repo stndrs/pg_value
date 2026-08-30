@@ -7,6 +7,10 @@
 - `EncodeError` and `DecodeError` types: `encode` and `decode` now return
   structured errors instead of `String`. Includes `encode_error_to_string`
   and `decode_error_to_string` for human-readable messages
+- Encoding and decoding support for the object-identifier types
+  (`regproc`, `regprocedure`, `regoper`, `regoperator`, `regclass`,
+  `regtype`, `xid`, `cid`)
+- Encoding and decoding support for `citext`
 
 ### Changed
 

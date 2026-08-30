@@ -772,7 +772,7 @@ fn encode_oid(
   num: Int,
   info: type_info.TypeInfo,
 ) -> Result(BitArray, EncodeError) {
-  use <- validate_typesend("oidsend", info)
+  use <- validate_typesend(info.typesend, info)
 
   case 0 <= num && num <= oid_max {
     True -> Ok(<<4:big-int-size(32), num:big-int-size(32)>>)
@@ -786,6 +786,14 @@ fn encode_int(
 ) -> Result(BitArray, EncodeError) {
   case info.typesend {
     "oidsend" -> encode_oid(num, info)
+    "regprocsend" -> encode_oid(num, info)
+    "regproceduresend" -> encode_oid(num, info)
+    "regopersend" -> encode_oid(num, info)
+    "regoperatorsend" -> encode_oid(num, info)
+    "regclasssend" -> encode_oid(num, info)
+    "regtypesend" -> encode_oid(num, info)
+    "xidsend" -> encode_oid(num, info)
+    "cidsend" -> encode_oid(num, info)
     "int2send" -> encode_int2(num, info)
     "int4send" -> encode_int4(num, info)
     "int8send" -> encode_int8(num, info)
@@ -875,6 +883,7 @@ fn encode_text(
     "charsend" -> encoder(text)
     "bpcharsend" -> encoder(text)
     "namesend" -> encoder(text)
+    "citextsend" -> encoder(text)
     _ -> Error(IncompatibleValue(Text(text), info.typesend))
   }
 }
@@ -1056,6 +1065,14 @@ pub fn decode(
       })
     "boolrecv" -> decode_bool(bits)
     "oidrecv" -> decode_oid(bits)
+    "regprocrecv" -> decode_oid(bits)
+    "regprocedurerecv" -> decode_oid(bits)
+    "regoperrecv" -> decode_oid(bits)
+    "regoperatorrecv" -> decode_oid(bits)
+    "regclassrecv" -> decode_oid(bits)
+    "regtyperecv" -> decode_oid(bits)
+    "xidrecv" -> decode_oid(bits)
+    "cidrecv" -> decode_oid(bits)
     "int2recv" -> decode_int2(bits)
     "int4recv" -> decode_int4(bits)
     "int8recv" -> decode_int8(bits)
@@ -1066,6 +1083,7 @@ pub fn decode(
     "namerecv" -> decode_text(bits)
     "charrecv" -> decode_text(bits)
     "bpcharrecv" -> decode_text(bits)
+    "citextrecv" -> decode_text(bits)
     "bytearecv" -> decode_bytea(bits)
     "uuid_recv" -> decode_uuid(bits)
     "hstore_recv" -> decode_hstore(bits)

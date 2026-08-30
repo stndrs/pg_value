@@ -311,6 +311,23 @@ pub fn decode_oid_test() {
   assert out == result
 }
 
+pub fn decode_oid_alias_test() {
+  use typereceive <- list.map([
+    "oidrecv", "regprocrecv", "regprocedurerecv", "regoperrecv",
+    "regoperatorrecv", "regclassrecv", "regtyperecv", "xidrecv", "cidrecv",
+  ])
+
+  let ti =
+    type_info.new(26)
+    |> type_info.typereceive(typereceive)
+  let in = <<1042:big-int-size(32)>>
+
+  let assert Ok(result) = value.decode(in, ti)
+  let assert Ok(1042) = decode.run(result, decode.int)
+
+  Nil
+}
+
 pub fn decode_bool_test() {
   use #(byte, expected) <- list.map([#(1, True), #(0, False)])
 
@@ -814,6 +831,24 @@ pub fn encode_oid_test() {
   let expected = <<4:big-int-size(32), valid:big-int-size(32)>>
 
   let assert Ok(out) = value.encode(in, oid())
+
+  assert expected == out
+}
+
+pub fn encode_oid_alias_test() {
+  // The object-identifier types share the oid wire format.
+  use typesend <- list.map([
+    "oidsend", "regprocsend", "regproceduresend", "regopersend",
+    "regoperatorsend", "regclasssend", "regtypesend", "xidsend", "cidsend",
+  ])
+
+  let ti =
+    type_info.new(26)
+    |> type_info.typesend(typesend)
+  let in = value.int(1042)
+  let expected = <<4:big-int-size(32), 1042:big-int-size(32)>>
+
+  let assert Ok(out) = value.encode(in, ti)
 
   assert expected == out
 }
