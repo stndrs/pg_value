@@ -44,6 +44,12 @@ pub type Value {
   Hstore(Dict(String, Option(String)))
   Enum(String)
   Json(json.Json)
+  Tid(block: Int, tuple_index: Int)
+  Macaddr(BitArray)
+  Point(x: Float, y: Float)
+  Line(a: Float, b: Float, c: Float)
+  LineSegment(x1: Float, y1: Float, x2: Float, y2: Float)
+  Circle(center_x: Float, center_y: Float, radius: Float)
 }
 
 pub const null = Null
@@ -76,6 +82,9 @@ pub type EncodeError {
   ArrayNotRectangular
   /// No element `TypeInfo` is available for an array type.
   MissingElemTypeInfo
+  /// `block` does not fit in the u32 tid range or `tuple_index` does not
+  /// fit in the u16 tid range.
+  TidOutOfRange(block: Int, tuple_index: Int)
 }
 
 pub type DecodeError {
@@ -122,6 +131,18 @@ pub type DecodeError {
   InvalidTimestamp
   /// Binary data is not a valid interval.
   InvalidInterval
+  /// Binary data is not a 6-byte tid (u32 block + u16 tuple index).
+  InvalidTid
+  /// Binary data is not 6 bytes of macaddr.
+  InvalidMacaddr
+  /// Binary data is not a valid point (two float64 values).
+  InvalidPoint
+  /// Binary data is not a valid line (three float64 values).
+  InvalidLine
+  /// Binary data is not a valid line segment (four float64 values).
+  InvalidLineSegment
+  /// Binary data is not a valid circle (three float64 values).
+  InvalidCircle
 }
 
 /// Converts an `EncodeError` to a human-readable message.
@@ -139,6 +160,11 @@ pub fn encode_error_to_string(error: EncodeError) -> String {
     InvalidCalendarDate -> "invalid date"
     ArrayNotRectangular -> "array is not rectangular"
     MissingElemTypeInfo -> "missing elem type info"
+    TidOutOfRange(block, tuple_index) ->
+      "Out of range for tid: "
+      <> int.to_string(block)
+      <> ", "
+      <> int.to_string(tuple_index)
   }
 }
 
@@ -166,6 +192,12 @@ pub fn decode_error_to_string(error: DecodeError) -> String {
     InvalidTime -> "invalid time"
     InvalidTimestamp -> "invalid timestamp"
     InvalidInterval -> "invalid interval"
+    InvalidTid -> "invalid tid"
+    InvalidMacaddr -> "invalid macaddr"
+    InvalidPoint -> "invalid point"
+    InvalidLine -> "invalid line"
+    InvalidLineSegment -> "invalid line segment"
+    InvalidCircle -> "invalid circle"
   }
 }
 
@@ -243,6 +275,38 @@ pub fn json(json: json.Json) -> Value {
   Json(json)
 }
 
+/// Returns a Tid (tuple identifier) value: block number and tuple index
+/// within the block, as used in PostgreSQL row identifiers.
+pub fn tid(block: Int, tuple_index: Int) -> Value {
+  Tid(block, tuple_index)
+}
+
+/// Returns a Macaddr value. Callers are responsible for ensuring the
+/// provided value is exactly 6 bytes; encoding fails otherwise.
+pub fn macaddr(macaddr: BitArray) -> Value {
+  Macaddr(macaddr)
+}
+
+/// Returns a Point value with the given x and y coordinates.
+pub fn point(x: Float, y: Float) -> Value {
+  Point(x, y)
+}
+
+/// Returns a Line value: coefficients of `a*x + b*y + c = 0`.
+pub fn line(a: Float, b: Float, c: Float) -> Value {
+  Line(a, b, c)
+}
+
+/// Returns a LineSegment value between the points `(x1, y1)` and `(x2, y2)`.
+pub fn line_segment(x1: Float, y1: Float, x2: Float, y2: Float) -> Value {
+  LineSegment(x1, y1, x2, y2)
+}
+
+/// Returns a Circle value with the given center coordinates and radius.
+pub fn circle(center_x: Float, center_y: Float, radius: Float) -> Value {
+  Circle(center_x, center_y, radius)
+}
+
 /// Returns an Array value. Each element is converted using the provided function.
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
@@ -290,6 +354,76 @@ pub fn to_string(value: Value) -> String {
       json.to_string(val)
       |> string.replace(each: "'", with: "''")
       |> single_quote
+    Tid(block, tuple_index) ->
+      "'(" <> int.to_string(block) <> "," <> int.to_string(tuple_index) <> ")'"
+    Macaddr(val) -> macaddr_to_string(val) |> single_quote
+    Point(x, y) ->
+      "'(" <> float64_to_pg_string(x) <> "," <> float64_to_pg_string(y) <> ")'"
+    Line(a, b, c) ->
+      "'{"
+      <> float64_to_pg_string(a)
+      <> ","
+      <> float64_to_pg_string(b)
+      <> ","
+      <> float64_to_pg_string(c)
+      <> "}'"
+    LineSegment(x1, y1, x2, y2) ->
+      "'[" <> point_to_string(x1, y1) <> "," <> point_to_string(x2, y2) <> "]'"
+    Circle(center_x, center_y, radius) ->
+      "'<("
+      <> float64_to_pg_string(center_x)
+      <> ","
+      <> float64_to_pg_string(center_y)
+      <> "),"
+      <> float64_to_pg_string(radius)
+      <> ">'"
+  }
+}
+
+fn point_to_string(x: Float, y: Float) -> String {
+  "(" <> float64_to_pg_string(x) <> "," <> float64_to_pg_string(y) <> ")"
+}
+
+/// Renders a float the way PostgreSQL renders float8 output: no trailing
+/// `.0`, no exponent for small integers-as-floats.
+fn float64_to_pg_string(f: Float) -> String {
+  case float.to_string(f) {
+    "" -> "0"
+    s ->
+      case string.ends_with(s, ".0") {
+        True -> string.drop_end(s, 2)
+        False -> s
+      }
+  }
+}
+
+fn macaddr_to_string(macaddr: BitArray) -> String {
+  case macaddr {
+    <<b1, b2, b3, b4, b5, b6>> ->
+      int.to_base16(b1)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+      <> ":"
+      <> int.to_base16(b2)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+      <> ":"
+      <> int.to_base16(b3)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+      <> ":"
+      <> int.to_base16(b4)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+      <> ":"
+      <> int.to_base16(b5)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+      <> ":"
+      <> int.to_base16(b6)
+      |> string.lowercase
+      |> string.pad_start(to: 2, with: "0")
+    _ -> ""
   }
 }
 
@@ -528,6 +662,13 @@ pub fn encode(
     Hstore(val) -> encode_hstore(val, info)
     Enum(val) -> encode_enum(val, info)
     Json(val) -> encode_json(val, info)
+    Tid(block, tuple_index) -> encode_tid(block, tuple_index, info)
+    Macaddr(val) -> encode_macaddr(val, info)
+    Point(x, y) -> encode_point(x, y, info)
+    Line(a, b, c) -> encode_line(a, b, c, info)
+    LineSegment(x1, y1, x2, y2) -> encode_line_segment(x1, y1, x2, y2, info)
+    Circle(center_x, center_y, radius) ->
+      encode_circle(center_x, center_y, radius, info)
   }
 }
 
@@ -565,6 +706,101 @@ fn encode_hstore(
   let size = bit_array.byte_size(encoded)
 
   Ok(<<size:big-int-size(32), encoded:bits>>)
+}
+
+fn encode_tid(
+  block: Int,
+  tuple_index: Int,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("tidsend", info)
+
+  case 0 <= block && block <= oid_max {
+    True ->
+      case 0 <= tuple_index && tuple_index <= int2_max {
+        True ->
+          Ok(<<
+            6:big-int-size(32),
+            block:big-int-size(32),
+            tuple_index:big-int-size(16),
+          >>)
+        False -> Error(TidOutOfRange(block, tuple_index))
+      }
+    False -> Error(TidOutOfRange(block, tuple_index))
+  }
+}
+
+fn encode_macaddr(
+  macaddr: BitArray,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("macaddr_send", info)
+
+  case macaddr {
+    <<b1, b2, b3, b4, b5, b6>> ->
+      Ok(<<6:big-int-size(32), b1, b2, b3, b4, b5, b6>>)
+    _ -> Error(IncompatibleValue(Macaddr(macaddr), info.typesend))
+  }
+}
+
+fn encode_point(
+  x: Float,
+  y: Float,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("point_send", info)
+
+  Ok(<<16:big-int-size(32), x:big-float-size(64), y:big-float-size(64)>>)
+}
+
+fn encode_line(
+  a: Float,
+  b: Float,
+  c: Float,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("line_send", info)
+
+  Ok(<<
+    24:big-int-size(32),
+    a:big-float-size(64),
+    b:big-float-size(64),
+    c:big-float-size(64),
+  >>)
+}
+
+fn encode_line_segment(
+  x1: Float,
+  y1: Float,
+  x2: Float,
+  y2: Float,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("lseg_send", info)
+
+  Ok(<<
+    32:big-int-size(32),
+    x1:big-float-size(64),
+    y1:big-float-size(64),
+    x2:big-float-size(64),
+    y2:big-float-size(64),
+  >>)
+}
+
+fn encode_circle(
+  center_x: Float,
+  center_y: Float,
+  radius: Float,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  use <- validate_typesend("circle_send", info)
+
+  Ok(<<
+    24:big-int-size(32),
+    center_x:big-float-size(64),
+    center_y:big-float-size(64),
+    radius:big-float-size(64),
+  >>)
 }
 
 fn do_encode_hstore(hstore: Dict(String, Option(String))) -> BitArray {
@@ -1095,6 +1331,12 @@ pub fn decode(
     "enum_recv" -> decode_enum(bits)
     "json_recv" -> decode_json(bits)
     "jsonb_recv" -> decode_jsonb(bits)
+    "tidrecv" -> decode_tid(bits)
+    "macaddr_recv" -> decode_macaddr(bits)
+    "point_recv" -> decode_point(bits)
+    "line_recv" -> decode_line(bits)
+    "lseg_recv" -> decode_line_segment(bits)
+    "circle_recv" -> decode_circle(bits)
     _ -> Error(UnsupportedType(info.typereceive))
   }
 }
@@ -1401,6 +1643,106 @@ fn decode_date(bits: BitArray) -> Result(Dynamic, DecodeError) {
       |> result.replace_error(InvalidDate)
     }
     _ -> Error(InvalidDate)
+  }
+}
+
+fn decode_tid(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<block:big-unsigned-int-size(32), tuple_index:big-unsigned-int-size(16)>> ->
+      dynamic.string(
+        "(" <> int.to_string(block) <> "," <> int.to_string(tuple_index) <> ")",
+      )
+      |> Ok
+    _ -> Error(InvalidTid)
+  }
+}
+
+fn decode_macaddr(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<b1, b2, b3, b4, b5, b6>> ->
+      dynamic.string(
+        hex_byte(b1)
+        <> ":"
+        <> hex_byte(b2)
+        <> ":"
+        <> hex_byte(b3)
+        <> ":"
+        <> hex_byte(b4)
+        <> ":"
+        <> hex_byte(b5)
+        <> ":"
+        <> hex_byte(b6),
+      )
+      |> Ok
+    _ -> Error(InvalidMacaddr)
+  }
+}
+
+fn hex_byte(byte: Int) -> String {
+  int.to_base16(byte)
+  |> string.lowercase
+  |> string.pad_start(to: 2, with: "0")
+}
+
+fn decode_point(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<x:big-float-size(64), y:big-float-size(64)>> ->
+      dynamic.string(point_to_string(x, y)) |> Ok
+    _ -> Error(InvalidPoint)
+  }
+}
+
+fn decode_line(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<a:big-float-size(64), b:big-float-size(64), c:big-float-size(64)>> ->
+      dynamic.string(
+        "{"
+        <> float64_to_pg_string(a)
+        <> ","
+        <> float64_to_pg_string(b)
+        <> ","
+        <> float64_to_pg_string(c)
+        <> "}",
+      )
+      |> Ok
+    _ -> Error(InvalidLine)
+  }
+}
+
+fn decode_line_segment(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<
+      x1:big-float-size(64),
+      y1:big-float-size(64),
+      x2:big-float-size(64),
+      y2:big-float-size(64),
+    >> ->
+      dynamic.string(
+        "[" <> point_to_string(x1, y1) <> "," <> point_to_string(x2, y2) <> "]",
+      )
+      |> Ok
+    _ -> Error(InvalidLineSegment)
+  }
+}
+
+fn decode_circle(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<
+      center_x:big-float-size(64),
+      center_y:big-float-size(64),
+      radius:big-float-size(64),
+    >> ->
+      dynamic.string(
+        "<("
+        <> float64_to_pg_string(center_x)
+        <> ","
+        <> float64_to_pg_string(center_y)
+        <> "),"
+        <> float64_to_pg_string(radius)
+        <> ">",
+      )
+      |> Ok
+    _ -> Error(InvalidCircle)
   }
 }
 

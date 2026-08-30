@@ -1443,3 +1443,233 @@ fn jsonb_type() {
   |> type_info.typesend("jsonb_send")
   |> type_info.typereceive("jsonb_recv")
 }
+
+fn tid() {
+  type_info.new(27)
+  |> type_info.typesend("tidsend")
+  |> type_info.typereceive("tidrecv")
+}
+
+fn macaddr() {
+  type_info.new(829)
+  |> type_info.typesend("macaddr_send")
+  |> type_info.typereceive("macaddr_recv")
+}
+
+fn point() {
+  type_info.new(600)
+  |> type_info.typesend("point_send")
+  |> type_info.typereceive("point_recv")
+}
+
+fn line() {
+  type_info.new(628)
+  |> type_info.typesend("line_send")
+  |> type_info.typereceive("line_recv")
+}
+
+fn lseg() {
+  type_info.new(601)
+  |> type_info.typesend("lseg_send")
+  |> type_info.typereceive("lseg_recv")
+}
+
+fn circle() {
+  type_info.new(718)
+  |> type_info.typesend("circle_send")
+  |> type_info.typereceive("circle_recv")
+}
+
+// Tier 2: tid, macaddr, and geometry types
+
+pub fn encode_tid_test() {
+  let expected = <<6:big-int-size(32), 42:big-int-size(32), 7:big-int-size(16)>>
+
+  let assert Ok(out) = value.encode(value.tid(42, 7), tid())
+
+  assert expected == out
+}
+
+pub fn tid_to_string_test() {
+  assert "'(42,7)'" == value.to_string(value.tid(42, 7))
+}
+
+pub fn encode_tid_error_test() {
+  use #(block, tuple_index) <- list.map([
+    #(-1, 0),
+    #(4_294_967_296, 0),
+    #(0, 65_536),
+  ])
+
+  let assert Error(value.TidOutOfRange(b, t)) =
+    value.encode(value.tid(block, tuple_index), tid())
+  assert b == block
+  assert t == tuple_index
+}
+
+pub fn encode_tid_type_mismatch_test() {
+  let assert Error(value.TypeMismatch("tidsend", "oidsend")) =
+    value.encode(value.tid(42, 7), oid())
+}
+
+pub fn decode_tid_test() {
+  let in = <<42:big-int-size(32), 7:big-int-size(16)>>
+
+  let assert Ok(result) = value.decode(in, tid())
+  let assert Ok("(42,7)") = decode.run(result, decode.string)
+}
+
+pub fn decode_tid_error_test() {
+  let assert Error(value.InvalidTid) = value.decode(<<1, 2>>, tid())
+}
+
+pub fn encode_macaddr_test() {
+  let mac = <<0x08, 0x00, 0x2b, 0x01, 0x02, 0x03>>
+  let expected = <<
+    6:big-int-size(32),
+    0x08,
+    0x00,
+    0x2b,
+    0x01,
+    0x02,
+    0x03,
+  >>
+
+  let assert Ok(out) = value.encode(value.macaddr(mac), macaddr())
+
+  assert expected == out
+}
+
+pub fn encode_macaddr_error_test() {
+  let assert Error(value.IncompatibleValue(
+    value.Macaddr(<<1, 2>>),
+    "macaddr_send",
+  )) = value.encode(value.macaddr(<<1, 2>>), macaddr())
+}
+
+pub fn decode_macaddr_test() {
+  let in = <<0x08, 0x00, 0x2b, 0x01, 0x02, 0x03>>
+
+  let assert Ok(result) = value.decode(in, macaddr())
+  let assert Ok("08:00:2b:01:02:03") = decode.run(result, decode.string)
+}
+
+pub fn decode_macaddr_error_test() {
+  let assert Error(value.InvalidMacaddr) = value.decode(<<1, 2>>, macaddr())
+}
+
+pub fn encode_point_test() {
+  let expected = <<
+    16:big-int-size(32),
+    1.5:big-float-size(64),
+    2.0:big-float-size(64),
+  >>
+
+  let assert Ok(out) = value.encode(value.point(1.5, 2.0), point())
+
+  assert expected == out
+}
+
+pub fn decode_point_test() {
+  let in = <<1.5:big-float-size(64), 2.0:big-float-size(64)>>
+
+  let assert Ok(result) = value.decode(in, point())
+  let assert Ok("(1.5,2)") = decode.run(result, decode.string)
+}
+
+pub fn decode_point_error_test() {
+  let assert Error(value.InvalidPoint) = value.decode(<<1, 2>>, point())
+}
+
+pub fn point_to_string_test() {
+  assert "'(1.5,2)'" == value.to_string(value.point(1.5, 2.0))
+  assert "'(2,3)'" == value.to_string(value.point(2.0, 3.0))
+}
+
+pub fn encode_line_test() {
+  let expected = <<
+    24:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+  >>
+
+  let assert Ok(out) = value.encode(value.line(1.0, 2.0, 3.0), line())
+
+  assert expected == out
+}
+
+pub fn decode_line_test() {
+  let in = <<
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, line())
+  let assert Ok("{1,2,3}") = decode.run(result, decode.string)
+}
+
+pub fn line_to_string_test() {
+  assert "'{1,2,3}'" == value.to_string(value.line(1.0, 2.0, 3.0))
+}
+
+pub fn encode_line_segment_test() {
+  let expected = <<
+    32:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(out) =
+    value.encode(value.line_segment(1.0, 2.0, 3.0, 4.0), lseg())
+
+  assert expected == out
+}
+
+pub fn decode_line_segment_test() {
+  let in = <<
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.0:big-float-size(64),
+    4.0:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, lseg())
+  let assert Ok("[(1,2),(3,4)]") = decode.run(result, decode.string)
+}
+
+pub fn line_segment_to_string_test() {
+  assert "'[(1,2),(3,4)]'"
+    == value.to_string(value.line_segment(1.0, 2.0, 3.0, 4.0))
+}
+
+pub fn encode_circle_test() {
+  let expected = <<
+    24:big-int-size(32),
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.5:big-float-size(64),
+  >>
+
+  let assert Ok(out) = value.encode(value.circle(1.0, 2.0, 3.5), circle())
+
+  assert expected == out
+}
+
+pub fn decode_circle_test() {
+  let in = <<
+    1.0:big-float-size(64),
+    2.0:big-float-size(64),
+    3.5:big-float-size(64),
+  >>
+
+  let assert Ok(result) = value.decode(in, circle())
+  let assert Ok("<(1,2),3.5>") = decode.run(result, decode.string)
+}
+
+pub fn circle_to_string_test() {
+  assert "'<(1,2),3.5>'" == value.to_string(value.circle(1.0, 2.0, 3.5))
+}

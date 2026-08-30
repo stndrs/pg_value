@@ -11,6 +11,10 @@
   (`regproc`, `regprocedure`, `regoper`, `regoperator`, `regclass`,
   `regtype`, `xid`, `cid`)
 - Encoding and decoding support for `citext`
+- `Tid`, `Macaddr`, `Point`, `Line`, `LineSegment`, and `Circle` values with
+  encoders and decoders for the `tid`, `macaddr`, `point`, `line`, `lseg`,
+  and `circle` types. Decoders return the PostgreSQL text output format as
+  a string (e.g. `"(1,2)"` for a point)
 
 ### Changed
 
