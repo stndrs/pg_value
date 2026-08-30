@@ -1831,3 +1831,192 @@ pub fn polygon_to_string_test() {
   assert "'((1,2),(3,4))'"
     == value.to_string(value.polygon([#(1.0, 2.0), #(3.0, 4.0)]))
 }
+
+fn bit() {
+  type_info.new(1560)
+  |> type_info.typesend("bitsend")
+  |> type_info.typereceive("bit_recv")
+}
+
+fn varbit() {
+  type_info.new(1562)
+  |> type_info.typesend("varbitsend")
+  |> type_info.typereceive("varbit_recv")
+}
+
+pub fn encode_bits_test() {
+  // '10110' -> 5 bits, 1 padded byte (10110 000)
+  let expected = <<5:big-int-size(32), 5:big-int-size(32), 0b10110000>>
+
+  let assert Ok(out) = value.encode(value.bits("10110"), bit())
+
+  assert expected == out
+}
+
+pub fn encode_bits_byte_aligned_test() {
+  // '10110101' -> 8 bits, 1 byte -> len 4 + 1 = 5
+  let expected = <<5:big-int-size(32), 8:big-int-size(32), 0b10110101>>
+
+  let assert Ok(out) = value.encode(value.bits("10110101"), bit())
+
+  assert expected == out
+}
+
+pub fn encode_bits_varbit_test() {
+  let expected = <<5:big-int-size(32), 5:big-int-size(32), 0b10110000>>
+
+  let assert Ok(out) = value.encode(value.bits("10110"), varbit())
+
+  assert expected == out
+}
+
+pub fn encode_bits_error_test() {
+  let assert Error(value.InvalidBits("10x1")) =
+    value.encode(value.bits("10x1"), bit())
+}
+
+pub fn encode_bits_incompatible_test() {
+  let assert Error(value.IncompatibleValue(value.Bits("101"), "oidsend")) =
+    value.encode(value.bits("101"), oid())
+}
+
+pub fn decode_bits_test() {
+  let in = <<5:big-int-size(32), 0b10110000>>
+
+  let assert Ok(result) = value.decode(in, bit())
+  let assert Ok("10110") = decode.run(result, decode.string)
+}
+
+pub fn decode_bits_varbit_test() {
+  let in = <<8:big-int-size(32), 0b10110101>>
+
+  let assert Ok(result) = value.decode(in, varbit())
+  let assert Ok("10110101") = decode.run(result, decode.string)
+}
+
+pub fn decode_bits_error_test() {
+  // count 5 but 2 bytes present
+  let assert Error(value.InvalidBitString) =
+    value.decode(<<5:big-int-size(32), 1, 2>>, bit())
+}
+
+pub fn bits_to_string_test() {
+  assert "'10110'" == value.to_string(value.bits("10110"))
+}
+
+fn inet() {
+  type_info.new(869)
+  |> type_info.typesend("inet_send")
+  |> type_info.typereceive("inet_recv")
+}
+
+fn cidr() {
+  type_info.new(650)
+  |> type_info.typesend("cidr_send")
+  |> type_info.typereceive("cidr_recv")
+}
+
+pub fn encode_inet_test() {
+  // 192.168.1.10/24 -> family 2, mask 24, is_cidr 0, size 4
+  let expected = <<8:big-int-size(32), 2, 24, 0, 4, 192, 168, 1, 10>>
+
+  let assert Ok(out) =
+    value.encode(value.inet(<<192, 168, 1, 10>>, 24, False), inet())
+
+  assert expected == out
+}
+
+pub fn encode_inet_cidr_test() {
+  // 192.168.1.0/24 as cidr -> is_cidr 1
+  let expected = <<8:big-int-size(32), 2, 24, 1, 4, 192, 168, 1, 0>>
+
+  let assert Ok(out) =
+    value.encode(value.inet(<<192, 168, 1, 0>>, 24, True), cidr())
+
+  assert expected == out
+}
+
+pub fn encode_inet_ipv6_test() {
+  // ::1/128 -> family 3, mask 128, is_cidr 0, size 16
+  let addr = <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+  let expected = <<
+    20:big-int-size(32), 3, 128, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 1,
+  >>
+
+  let assert Ok(out) = value.encode(value.inet(addr, 128, False), inet())
+
+  assert expected == out
+}
+
+pub fn encode_inet_error_test() {
+  // 5-byte address is invalid
+  let assert Error(value.InvalidInet(addr, 24)) =
+    value.encode(value.inet(<<1, 2, 3, 4, 5>>, 24, False), inet())
+  assert addr == <<1, 2, 3, 4, 5>>
+
+  // IPv4 with mask > 32
+  let assert Error(value.InvalidInet(_, 33)) =
+    value.encode(value.inet(<<192, 168, 1, 10>>, 33, False), inet())
+}
+
+pub fn encode_inet_incompatible_test() {
+  let assert Error(value.IncompatibleValue(
+    value.Inet(<<192, 168, 1, 10>>, 24, False),
+    "oidsend",
+  )) = value.encode(value.inet(<<192, 168, 1, 10>>, 24, False), oid())
+}
+
+pub fn decode_inet_test() {
+  let in = <<2, 24, 0, 4, 192, 168, 1, 10>>
+
+  let assert Ok(result) = value.decode(in, inet())
+  let assert Ok("192.168.1.10/24") = decode.run(result, decode.string)
+}
+
+pub fn decode_inet_full_mask_test() {
+  // /32 IPv4 prints without suffix
+  let in = <<2, 32, 0, 4, 192, 168, 1, 10>>
+
+  let assert Ok(result) = value.decode(in, inet())
+  let assert Ok("192.168.1.10") = decode.run(result, decode.string)
+}
+
+pub fn decode_inet_cidr_test() {
+  let in = <<2, 24, 1, 4, 192, 168, 1, 0>>
+
+  let assert Ok(result) = value.decode(in, cidr())
+  let assert Ok("192.168.1.0/24") = decode.run(result, decode.string)
+}
+
+pub fn decode_inet_ipv6_test() {
+  // 2001:db8:0:0:8:800:200c:417a -> compressed 2001:db8::8:800:200c:417a
+  let addr = <<
+    0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0, 0, 0x08, 0x08, 0x00, 0x20, 0x0c, 0x41,
+    0x7a,
+  >>
+  let in = <<3, 64, 0, 16, addr:bits>>
+
+  let assert Ok(result) = value.decode(in, inet())
+  let assert Ok("2001:db8::8:800:200c:417a/64") =
+    decode.run(result, decode.string)
+}
+
+pub fn decode_inet_ipv6_loopback_test() {
+  let addr = <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1>>
+  let in = <<3, 128, 0, 16, addr:bits>>
+
+  let assert Ok(result) = value.decode(in, inet())
+  let assert Ok("::1") = decode.run(result, decode.string)
+}
+
+pub fn decode_inet_error_test() {
+  let assert Error(value.InvalidInetAddress) =
+    value.decode(<<2, 24, 0, 5, 1, 2, 3, 4>>, inet())
+}
+
+pub fn inet_to_string_test() {
+  assert "'192.168.1.10/24'"
+    == value.to_string(value.inet(<<192, 168, 1, 10>>, 24, False))
+  assert "'10.0.0.1'" == value.to_string(value.inet(<<10, 0, 0, 1>>, 32, False))
+}

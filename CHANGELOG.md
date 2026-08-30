@@ -17,6 +17,8 @@
   a string (e.g. `"(1,2)"` for a point)
 - `Path` and `Polygon` values with encoders and decoders for the `path` and
   `polygon` types, following the same string-decoding convention
+- `Bits` values for `bit`/`varbit` and `Inet` values for `inet`/`cidr` (with
+  IPv6 `::` compression in output) — each with encoders and decoders
 
 ### Changed
 

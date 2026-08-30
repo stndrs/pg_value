@@ -52,6 +52,8 @@ pub type Value {
   Circle(center_x: Float, center_y: Float, radius: Float)
   Path(open: Bool, points: List(#(Float, Float)))
   Polygon(vertices: List(#(Float, Float)))
+  Bits(bits: String)
+  Inet(address: BitArray, netmask: Int, cidr: Bool)
 }
 
 pub const null = Null
@@ -87,6 +89,11 @@ pub type EncodeError {
   /// `block` does not fit in the u32 tid range or `tuple_index` does not
   /// fit in the u16 tid range.
   TidOutOfRange(block: Int, tuple_index: Int)
+  /// A `Bits` value contains characters other than `0` and `1`.
+  InvalidBits(value: String)
+  /// An `Inet` address is not 4 or 16 bytes, or the netmask does not match
+  /// the address family.
+  InvalidInet(address: BitArray, netmask: Int)
 }
 
 pub type DecodeError {
@@ -149,6 +156,10 @@ pub type DecodeError {
   InvalidPath
   /// Binary data is not a valid polygon (count, point pairs).
   InvalidPolygon
+  /// Binary data is not a valid bit string.
+  InvalidBitString
+  /// Binary data is not a valid inet or cidr value.
+  InvalidInetAddress
 }
 
 /// Converts an `EncodeError` to a human-readable message.
@@ -171,6 +182,12 @@ pub fn encode_error_to_string(error: EncodeError) -> String {
       <> int.to_string(block)
       <> ", "
       <> int.to_string(tuple_index)
+    InvalidBits(value) -> "invalid bits value: " <> value
+    InvalidInet(address, netmask) ->
+      "invalid inet: "
+      <> int.to_string(bit_array.byte_size(address))
+      <> " bytes, netmask "
+      <> int.to_string(netmask)
   }
 }
 
@@ -206,6 +223,8 @@ pub fn decode_error_to_string(error: DecodeError) -> String {
     InvalidCircle -> "invalid circle"
     InvalidPath -> "invalid path"
     InvalidPolygon -> "invalid polygon"
+    InvalidBitString -> "invalid bit string"
+    InvalidInetAddress -> "invalid inet address"
   }
 }
 
@@ -326,6 +345,20 @@ pub fn polygon(vertices: List(#(Float, Float))) -> Value {
   Polygon(vertices)
 }
 
+/// Returns a Bit value for `bit`/`varbit` columns. The string must contain
+/// only `0` and `1` characters; encoding fails otherwise.
+pub fn bits(bits: String) -> Value {
+  Bits(bits)
+}
+
+/// Returns an Inet value for `inet`/`cidr` columns. `address` is 4 bytes
+/// (IPv4) or 16 bytes (IPv6), `netmask` is the prefix length (0-32 or
+/// 0-128), and `cidr` marks a `cidr` value (inet values with a host-part
+/// of all zeros, as PostgreSQL requires for cidr).
+pub fn inet(address: BitArray, netmask: Int, cidr: Bool) -> Value {
+  Inet(address, netmask, cidr)
+}
+
 /// Returns an Array value. Each element is converted using the provided function.
 pub fn array(elements: List(a), of kind: fn(a) -> Value) -> Value {
   elements
@@ -400,6 +433,9 @@ pub fn to_string(value: Value) -> String {
     Polygon(vertices) ->
       points_to_string(vertices)
       |> fn(s) { "'(" <> s <> ")'" }
+    Bits(bits) -> single_quote(bits)
+    Inet(address, netmask, cidr) ->
+      inet_to_string(address, netmask, cidr) |> single_quote
   }
 }
 
@@ -700,6 +736,8 @@ pub fn encode(
       encode_circle(center_x, center_y, radius, info)
     Path(open, points) -> encode_path(open, points, info)
     Polygon(vertices) -> encode_polygon(vertices, info)
+    Bits(bits) -> encode_bits(bits, info)
+    Inet(address, netmask, cidr) -> encode_inet(address, netmask, cidr, info)
   }
 }
 
@@ -861,6 +899,103 @@ fn encode_path(
     open_byte,
     count:big-int-size(32),
     encoded_points:bits,
+  >>)
+}
+
+fn encode_bits(
+  bits: String,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  case info.typesend {
+    "bitsend" | "varbitsend" ->
+      case string_to_bits(bits) {
+        Ok(encoded) -> {
+          let bit_count = string.length(bits)
+          let padded = case bit_count % 8 {
+            0 -> encoded
+            8 -> encoded
+            rem -> {
+              let pad = 8 - rem
+              pad_bits(encoded, pad)
+            }
+          }
+          let byte_count = bit_array.byte_size(padded)
+          Ok(<<
+            { byte_count + 4 }:big-int-size(32),
+            bit_count:big-int-size(32),
+            padded:bits,
+          >>)
+        }
+        Error(_) -> Error(InvalidBits(bits))
+      }
+    _ -> Error(IncompatibleValue(Bits(bits), info.typesend))
+  }
+}
+
+fn pad_bits(bits: BitArray, count: Int) -> BitArray {
+  case count {
+    0 -> bits
+    _ -> pad_bits(<<bits:bits, 0:size(1)>>, count - 1)
+  }
+}
+
+fn string_to_bits(bits: String) -> Result(BitArray, Nil) {
+  do_string_to_bits(bits, <<>>)
+}
+
+fn do_string_to_bits(bits: String, acc: BitArray) -> Result(BitArray, Nil) {
+  case string.pop_grapheme(bits) {
+    Ok(#("0", rest)) -> do_string_to_bits(rest, <<acc:bits, 0:size(1)>>)
+    Ok(#("1", rest)) -> do_string_to_bits(rest, <<acc:bits, 1:size(1)>>)
+    Ok(#(_, _)) -> Error(Nil)
+    Error(_) ->
+      case string.length(bits) {
+        0 -> Ok(<<acc:bits, 0:size(0)>>)
+        _ -> Error(Nil)
+      }
+  }
+}
+
+fn encode_inet(
+  address: BitArray,
+  netmask: Int,
+  cidr: Bool,
+  info: type_info.TypeInfo,
+) -> Result(BitArray, EncodeError) {
+  case info.typesend {
+    "inet_send" | "cidr_send" -> {
+      let size = bit_array.byte_size(address)
+      case size, netmask {
+        4, n if n >= 0 && n <= 32 ->
+          do_encode_inet(address, netmask, cidr, 2, 4, 8)
+        16, n if n >= 0 && n <= 128 ->
+          do_encode_inet(address, netmask, cidr, 3, 16, 20)
+        _, _ -> Error(InvalidInet(address, netmask))
+      }
+    }
+    _ -> Error(IncompatibleValue(Inet(address, netmask, cidr), info.typesend))
+  }
+}
+
+fn do_encode_inet(
+  address: BitArray,
+  netmask: Int,
+  cidr: Bool,
+  family: Int,
+  size: Int,
+  nbytes: Int,
+) -> Result(BitArray, EncodeError) {
+  let is_cidr = case cidr {
+    True -> 1
+    False -> 0
+  }
+  Ok(<<
+    nbytes:big-int-size(32),
+    family,
+    netmask,
+    is_cidr,
+    size,
+    address:bits,
   >>)
 }
 
@@ -1424,6 +1559,8 @@ pub fn decode(
     "circle_recv" -> decode_circle(bits)
     "path_recv" -> decode_path(bits)
     "poly_recv" -> decode_polygon(bits)
+    "bit_recv" | "varbit_recv" -> decode_bits(bits)
+    "inet_recv" | "cidr_recv" -> decode_inet(bits)
     _ -> Error(UnsupportedType(info.typereceive))
   }
 }
@@ -1888,6 +2025,151 @@ fn decode_polygon(bits: BitArray) -> Result(Dynamic, DecodeError) {
         Error(_) -> Error(InvalidPolygon)
       }
     _ -> Error(InvalidPolygon)
+  }
+}
+
+fn decode_bits(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<bit_count:big-signed-int-size(32), rest:bits>> ->
+      case bit_count >= 0, { bit_count + 7 } / 8 == bit_array.byte_size(rest) {
+        True, True ->
+          case bits_to_string(rest, bit_count, "") {
+            Ok(s) -> dynamic.string(s) |> Ok
+            Error(_) -> Error(InvalidBitString)
+          }
+        _, _ -> Error(InvalidBitString)
+      }
+    _ -> Error(InvalidBitString)
+  }
+}
+
+fn bits_to_string(
+  bits: BitArray,
+  remaining: Int,
+  acc: String,
+) -> Result(String, Nil) {
+  case remaining {
+    0 -> Ok(acc)
+    _ ->
+      case bits {
+        <<1:size(1), rest:bits>> ->
+          bits_to_string(rest, remaining - 1, acc <> "1")
+        <<0:size(1), rest:bits>> ->
+          bits_to_string(rest, remaining - 1, acc <> "0")
+        _ -> Error(Nil)
+      }
+  }
+}
+
+fn decode_inet(bits: BitArray) -> Result(Dynamic, DecodeError) {
+  case bits {
+    <<2, netmask, is_cidr, 4, address:bytes-size(4)>> -> {
+      let assert Ok(cidr) = case is_cidr {
+        0 -> Ok(False)
+        1 -> Ok(True)
+        _ -> Error(Nil)
+      }
+      dynamic.string(inet_to_string(address, netmask, cidr)) |> Ok
+    }
+    <<3, netmask, is_cidr, 16, address:bytes-size(16)>> -> {
+      let assert Ok(cidr) = case is_cidr {
+        0 -> Ok(False)
+        1 -> Ok(True)
+        _ -> Error(Nil)
+      }
+      dynamic.string(inet_to_string(address, netmask, cidr)) |> Ok
+    }
+    _ -> Error(InvalidInetAddress)
+  }
+}
+
+fn inet_to_string(address: BitArray, netmask: Int, cidr: Bool) -> String {
+  let base = case address {
+    <<a, b, c, d>> ->
+      int.to_string(a)
+      <> "."
+      <> int.to_string(b)
+      <> "."
+      <> int.to_string(c)
+      <> "."
+      <> int.to_string(d)
+    _ -> ipv6_to_string(address)
+  }
+  let suffix = case netmask, cidr {
+    _, True -> "/" <> int.to_string(netmask)
+    32, _ | 128, _ -> ""
+    _, _ -> "/" <> int.to_string(netmask)
+  }
+  base <> suffix
+}
+
+fn ipv6_to_string(address: BitArray) -> String {
+  // Find the longest run of zero groups for :: compression.
+  let #(_, _, #(start, len)) =
+    longest_zero_run(ipv6_groups(address), 0, 0, 0, 0, 0)
+  let best_start = start
+  let best_len = len
+  let groups =
+    address
+    |> ipv6_groups
+    |> list.map(fn(g) { int.to_base16(g) |> string.lowercase })
+  case best_len >= 2 {
+    False -> string.join(groups, ":")
+    True -> {
+      let before = groups |> list.take(best_start) |> string.join(":")
+      let after = groups |> list.drop(best_start + best_len) |> string.join(":")
+      case after {
+        "" -> before <> ":"
+        _ -> before <> "::" <> after
+      }
+    }
+  }
+}
+
+fn ipv6_groups(address: BitArray) -> List(Int) {
+  case address {
+    <<>> -> []
+    <<a:big-unsigned-int-size(8), b:big-unsigned-int-size(8), rest:bits>> -> [
+      a * 256 + b,
+      ..ipv6_groups(rest)
+    ]
+    _ -> []
+  }
+}
+
+fn longest_zero_run(
+  groups: List(Int),
+  index: Int,
+  current_start: Int,
+  current_len: Int,
+  best_start: Int,
+  best_len: Int,
+) -> #(Int, Int, #(Int, Int)) {
+  case groups {
+    [] ->
+      case current_len > best_len {
+        True -> #(current_start, current_len, #(current_start, current_len))
+        False -> #(current_start, current_len, #(best_start, best_len))
+      }
+    [0, ..rest] ->
+      case current_len {
+        0 -> longest_zero_run(rest, index + 1, index, 1, best_start, best_len)
+        _ ->
+          longest_zero_run(
+            rest,
+            index + 1,
+            current_start,
+            current_len + 1,
+            best_start,
+            best_len,
+          )
+      }
+    [_, ..rest] ->
+      case current_len > best_len {
+        True ->
+          longest_zero_run(rest, index + 1, 0, 0, current_start, current_len)
+        False -> longest_zero_run(rest, index + 1, 0, 0, best_start, best_len)
+      }
   }
 }
 
