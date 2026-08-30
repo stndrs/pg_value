@@ -70,7 +70,7 @@ pub fn add(left: Interval, right: Interval) -> Interval {
 /// `Interval(0, 0, 0, -500_000)` is formatted as "PT-0.5S" and
 /// `Interval(0, 0, 10, -200_000)` as "PT9.8S".
 ///
-/// Note: negative month/day components are emitted directly, e.g. "P-1M". This
+/// Negative month/day components are emitted directly, e.g. "P-1M". This
 /// is accepted by PostgreSQL's interval parser but is not strictly valid ISO
 /// 8601, which has no representation for negative individual components.
 pub fn to_iso8601_string(interval: Interval) -> String {

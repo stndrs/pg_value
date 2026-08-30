@@ -659,8 +659,6 @@ pub fn decode_time_test() {
 }
 
 pub fn decode_time_max_test() {
-  // PostgreSQL allows time '24:00:00' (86_400_000_000 microseconds), which must
-  // not crash the decoder.
   let in = <<86_400_000_000:big-int-size(64)>>
 
   let assert Ok(result) = value.decode(in, time())

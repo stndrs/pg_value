@@ -62,6 +62,7 @@ pub fn negative_interval_to_iso8601_string_test() {
     #(interval.Interval(0, 0, 0, -500_000), "PT-0.5S"),
     #(interval.Interval(0, 0, 10, -200_000), "PT9.8S"),
     #(interval.Interval(0, 0, -10, 200_000), "PT-9.8S"),
+    #(interval.Interval(0, 0, -10, -200_000), "PT-10.2S"),
     #(interval.Interval(0, 0, -30, 0), "PT-30S"),
     #(interval.Interval(-1, 0, 0, 0), "P-1M"),
     #(interval.Interval(0, -2, 0, 0), "P-2D"),

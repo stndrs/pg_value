@@ -104,13 +104,6 @@ pub fn timestamp(timestamp: timestamp.Timestamp) -> Value {
 }
 
 /// Returns a Timestamptz value with a timezone offset.
-///
-/// Note on convention: `encode` treats the `Timestamp` as a wall-clock time in
-/// the zone described by `offset` and subtracts the offset to produce the UTC
-/// instant on the wire. Decoding always yields the UTC instant with no offset.
-/// Consequently `decode(encode(Timestamptz(ts, off)))` equals `ts` only when
-/// `off` is zero. If your `Timestamp` is already an absolute UTC instant, pass
-/// `duration.seconds(0)` as the offset.
 pub fn timestamptz(
   timestamp: timestamp.Timestamp,
   offset: duration.Duration,
@@ -159,13 +152,6 @@ pub fn nullable(inner_type: fn(a) -> Value, optional: Option(a)) -> Value {
 }
 
 /// Converts a `Value` to a string formatted properly for PostgreSQL
-///
-/// Intended for building SQL literals for debugging and logging. String
-/// escaping is only safe when the server has `standard_conforming_strings = on`
-/// (the default since PostgreSQL 9.1); with it off, backslash handling can
-/// un-terminate the literal and enable injection. For untrusted data, prefer
-/// parameterized queries with the binary `encode` path rather than
-/// interpolating `to_string` output.
 pub fn to_string(value: Value) -> String {
   case value {
     Null -> "NULL"
@@ -503,9 +489,9 @@ fn encode_array(
 
   case info.elem_type {
     Some(elem_ti) -> {
-      // PostgreSQL's wire format flattens multidimensional arrays: a single
-      // header (ndim, flags, scalar element oid), one {len, lower bound} pair
-      // per dimension, and the leaf elements laid out flat in row-major order.
+      // PostgreSQL's wire format flattens multidimensional arrays. A header
+      // (ndim, flags, scalar element oid), one {len, lower bound} pair per
+      // dimension, and the leaf elements laid out flat in row-major order.
       let scalar_ti = scalar_elem_type(elem_ti)
 
       use dimensions <- result.try(array_dimensions(elems))
@@ -534,7 +520,7 @@ fn scalar_elem_type(info: type_info.TypeInfo) -> type_info.TypeInfo {
 }
 
 // Determines the dimensions of a (possibly nested) array, validating that it
-// is rectangular: every sibling sub-array at a given depth must have the same
+// is rectangular. Every sibling sub-array at a given depth must have the same
 // length, and elements at a given depth must all be arrays or all be scalars.
 fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
   case elems {
@@ -551,12 +537,7 @@ fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
 
       // Ensure every sibling sub-array shares the same inner dimensions.
       use <- bool.guard(
-        when: !list.all(rest, fn(sibling) {
-          case sibling {
-            Array(other) -> array_dimensions(other) == Ok(inner_dims)
-            _ -> False
-          }
-        }),
+        when: !list.all(rest, ensure_sub_array_dimensions(_, inner_dims)),
         return: Error("Array is not rectangular"),
       )
 
@@ -570,6 +551,16 @@ fn array_dimensions(elems: List(Value)) -> Result(List(Int), String) {
 
       Ok([list.length(elems)])
     }
+  }
+}
+
+fn ensure_sub_array_dimensions(
+  sub_array: Value,
+  dimensions: List(Int),
+) -> Bool {
+  case sub_array {
+    Array(other) -> array_dimensions(other) == Ok(dimensions)
+    _ -> False
   }
 }
 
@@ -587,10 +578,16 @@ fn array_leaves(elems: List(Value)) -> Result(List(Value), String) {
     case elem {
       Array(inner) -> {
         use inner_leaves <- result.map(array_leaves(inner))
-        list.append(acc, inner_leaves)
+
+        list.prepend(acc, inner_leaves)
       }
-      _ -> Ok(list.append(acc, [elem]))
+      _ -> Ok(list.prepend(acc, [elem]))
     }
+  })
+  |> result.map(fn(leaves) {
+    leaves
+    |> list.reverse
+    |> list.flatten
   })
 }
 
@@ -969,7 +966,7 @@ fn decode_array(
       rest:bits,
     >> -> {
       // The per-dimension {length, lower bound} headers are consumed but not
-      // needed: elements are decoded flat in row-major order.
+      // needed. Elements are decoded flat in row-major order.
       use rest <- result.try(skip_array_dimensions(dimensions, rest))
 
       decode_array_elems(rest, decoder, [])
@@ -1160,7 +1157,6 @@ fn do_decode_hstore(
 ) -> Result(Dict(String, Option(String)), Nil) {
   case size, bits {
     0, <<>> -> Ok(acc)
-    // Declared count exhausted but trailing bytes remain: malformed input.
     0, _ -> Error(Nil)
     size, bits1 -> {
       use #(key, rest) <- result.try(decode_hstore_key(bits1))
@@ -1285,8 +1281,6 @@ fn from_microseconds(usecs: Int) -> calendar.TimeOfDay {
   let seconds = usecs / usecs_per_sec
   let nanoseconds = { usecs % usecs_per_sec } * 1000
 
-  // Compute h/m/s with integer math rather than calendar:seconds_to_time/1,
-  // which guards Secs < 86400 and would crash on PostgreSQL's valid 24:00:00.
   let hours = seconds / 3600
   let minutes = { seconds % 3600 } / 60
   let seconds = seconds % 60
@@ -1318,17 +1312,17 @@ fn unix_seconds_before_postgres_epoch() -> duration.Duration {
 
 const oid_max = 0xFFFFFFFF
 
-const int2_min = -32_768
+const int2_min = -0x8000
 
 const int2_max = 0x7FFF
 
-const int4_min = -2_147_483_648
+const int4_min = -0x80000000
 
 const int4_max = 0x7FFFFFFF
 
 const int8_max = 0x7FFFFFFFFFFFFFFF
 
-const int8_min = -9_223_372_036_854_775_808
+const int8_min = -0x8000000000000000
 
 // Seconds between Jan 1, 0001 and Jan 1, 2000
 const postgres_gs_epoch = 63_113_904_000
